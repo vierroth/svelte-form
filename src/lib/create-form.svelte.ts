@@ -1,5 +1,5 @@
 import type { Action } from "svelte/action";
-import { type ZodSchema } from "zod";
+import { flattenError, ZodType } from "zod";
 import equal from "fast-deep-equal";
 import { parseFormData } from "./parse-form-data.js";
 
@@ -27,11 +27,11 @@ type PropertiesToStringArray<T> = T extends any
       [K in keyof T]: ToStringArray<T[K]>;
     };
 
-export function createForm<Schema extends ZodSchema>(props: {
+export function createForm<Schema extends ZodType>(props: {
   schema: Schema;
-  initialValues?: Schema["_type"];
+  initialValues?: Schema["_output"];
   onSubmit?: (
-    data: Schema["_type"],
+    data: Schema["_output"],
   ) => Promise<void | boolean> | (void | boolean);
   onSuccess?: () => Promise<void> | void;
   onError?: (error: any) => Promise<void> | void;
@@ -177,8 +177,8 @@ export function createForm<Schema extends ZodSchema>(props: {
     } else {
       isValid = false;
       errors = all
-        ? result.error.flatten().fieldErrors
-        : map(result.error.flatten().fieldErrors, touched);
+        ? flattenError(result.error).fieldErrors
+        : map(flattenError(result.error).fieldErrors, touched);
       return false;
     }
   };
@@ -225,7 +225,7 @@ export function createForm<Schema extends ZodSchema>(props: {
       isDirty = false;
     },
     get data() {
-      return data as Schema["_type"];
+      return data as Schema["_output"];
     },
     set data(v) {
       data = v;
@@ -237,7 +237,7 @@ export function createForm<Schema extends ZodSchema>(props: {
       touched = v;
     },
     get errors() {
-      return errors as PropertiesToStringArray<Schema["_type"]>;
+      return errors as PropertiesToStringArray<Schema["_output"]>;
     },
     get isValid() {
       return isValid;

@@ -39,5 +39,5 @@ export async function verifyFormData<S extends ZodSchema>(
 ) {
   return schema.parse(
     await parseFormData(await request.formData()),
-  ) as S["_type"];
+  ) as S["_output"];
 }
