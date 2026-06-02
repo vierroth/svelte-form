@@ -1,6 +1,6 @@
 {
   "name": "@flit/svelte-form",
-  "version": "1.3.0",
+  "version": "2.0.2",
   "description": "A svelte form management library",
   "homepage": "https://github.com/vierroth/svelte-form",
   "bugs": "https://github.com/vierroth/svelte-form/issues",

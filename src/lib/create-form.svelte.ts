@@ -1,15 +1,9 @@
 import type { Action } from "svelte/action";
-import {
-  type ZodType,
-  type output,
-  flattenError,
-  type ZodObject,
-  type ZodOptional,
-  type ZodNullable,
-  type ZodDefault,
-} from "zod";
+import { type core, type output, safeParse, flattenError } from "zod/v4-mini";
 import equal from "fast-deep-equal";
 import { extractDefaults } from "./extract-defaults.js";
+
+type $ZodType = core.$ZodType;
 
 type FieldErrors<T> = (T extends Date
   ? string[] | undefined
@@ -17,7 +11,7 @@ type FieldErrors<T> = (T extends Date
     ? { [K in keyof T]: FieldErrors<T[K]> }
     : string[] | undefined) & { submit?: string };
 
-export function createForm<S extends ZodType>(props: {
+export function createForm<S extends core.$ZodType>(props: {
   schema: S;
   initialValues?: output<S>;
   onSubmit?: (data: output<S>) => Promise<void | boolean> | (void | boolean);
@@ -45,7 +39,11 @@ export function createForm<S extends ZodType>(props: {
   });
 
   $effect(() => {
-    const result = props.schema.safeParse(data);
+    const result = safeParse(props.schema, data);
+
+    if (result.success && result.data) {
+      data = result.data;
+    }
 
     const fieldErrors = result.success
       ? {}
@@ -99,37 +97,31 @@ export function createForm<S extends ZodType>(props: {
   };
 
   function buildErrorsFromSchema(
-    schema: ZodType,
+    schema: $ZodType,
     fieldErrors: any,
     touchedFields: any,
     path: string[] = [],
   ): any {
-    // Unwrap optional, nullable, default wrappers
     let innerSchema = schema;
     while (true) {
+      const def = innerSchema._zod.def;
       if (
-        "unwrap" in innerSchema &&
-        typeof (innerSchema as any).unwrap === "function"
+        (def.type === "optional" ||
+          def.type === "nullable" ||
+          def.type === "default" ||
+          def.type === "catch") &&
+        "innerType" in def &&
+        def.innerType
       ) {
-        innerSchema = (
-          innerSchema as ZodOptional<any> | ZodNullable<any>
-        ).unwrap();
-      } else if (
-        "_def" in innerSchema &&
-        (innerSchema as any)._def?.innerType
-      ) {
-        innerSchema = (innerSchema as ZodDefault<any>).def.innerType;
+        innerSchema = def.innerType as $ZodType;
       } else {
         break;
       }
     }
 
-    // If it's an object schema, recurse into its shape
-    if (
-      "shape" in innerSchema &&
-      typeof (innerSchema as any).shape === "object"
-    ) {
-      const shape = (innerSchema as ZodObject<any>).shape;
+    const def = innerSchema._zod.def;
+    if (def.type === "object" && "shape" in def && def.shape) {
+      const shape = def.shape as Record<string, $ZodType>;
       const result: Record<string, unknown> = {};
       for (const key of Object.keys(shape)) {
         result[key] = buildErrorsFromSchema(

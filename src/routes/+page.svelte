@@ -33,14 +33,14 @@
       console.log(formData)
     },
     onSuccess() {
-      location.reload();
+      // location.reload();
     },
     onError(error: any) {
       console.log(error);
     },
   });
 
-  $inspect(form)
+  // $inspect(form)
 </script>
 
 <svelte:head>
