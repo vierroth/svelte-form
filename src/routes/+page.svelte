@@ -9,7 +9,7 @@
         .trim()
         .regex(/^[A-Za-z ]*$/, "Can only contain letters and spaces")
         .min(1, "Required")
-        .max(80, "Can't be longer then 80 characters"),
+        .max(80, "Can't be longer then 80 characters").default("Default"),
       age: z
         .coerce
         .number()
@@ -27,7 +27,7 @@
         .regex(/^[0-9+ -]*$/, "Can only contain numbers and +/-")
         .max(20, "Can't be longer then 20 characters")
         .optional(),
-      eula: z.string(),
+      eula: z.literal(true),
     }),
     async onSubmit(formData) {
       console.log(formData)
@@ -40,7 +40,7 @@
     },
   });
 
-  $inspect(form.data)
+  $inspect(form)
 </script>
 
 <svelte:head>
@@ -51,9 +51,10 @@
   <h1>Complete Your Profile</h1>
   <div class="complete">
     <form use:form.action>
-      <label>Full Name*</label>
+      <label for="name">Full Name*</label>
       <input
         name="name"
+        bind:value={form.data.name}
         type="text"
         style="display: block"
       />
@@ -61,9 +62,10 @@
         <p style="color: red;">{form.errors.name}</p>
       {/if}
       <br />
-      <label>Age*</label>
+      <label for="age">Age*</label>
       <input
         name="age"
+        bind:value={form.data.age}
         type="text"
         style="display: block"
       />
@@ -71,24 +73,30 @@
         <p style="color: red;">{form.errors.age}</p>
       {/if}
       <br />
-      <label>Position*</label>
+      <label for="position">Position*</label>
       <input
         name="position"
+        bind:value={form.data.position}
         type="text"
         style="display: block"
       />
+      {#if form.errors.position}
+        <p style="color: red;">{form.errors.position}</p>
+      {/if}
       <br />
-      <label>Phone Number</label>
+      <label for="phoneNumber">Phone Number</label>
       <input
         name="phoneNumber"
+        bind:value={form.data.phoneNumber}
         type="text"
         inputmode="tel"
         style="display: block"
       />
       <br />
-      <label>Term and Conditions</label>
+      <label for="eula">Term and Conditions</label>
       <input
         name="eula"
+        bind:checked={form.data.eula}
         type="checkbox"
       />
       <span id="terms"
@@ -96,8 +104,8 @@
           >Terms and Conditions</a
         ></span
       >
-      {#if form.errors.general}
-        <span style="color: #d4514c">{@html form.errors.general}</span>
+      {#if form.errors.submit}
+        <span style="color: #d4514c">{@html form.errors.submit}</span>
         <br />
         <br />
       {/if}
@@ -105,7 +113,15 @@
         type="submit"
         disabled={form.isSubmitting || !form.isValid || null}
         style="display: block"
-      >{form.isSubmitting ? "Completing..." : "Complete"}</button>
+      >
+      	{form.isSubmitting ? "Completing..." : "Complete"}
+      </button>
+      <button
+        type="reset"
+        style="display: block"
+      >
+      	Reset
+      </button>
     </form>
   </div>
 </div>
@@ -136,12 +152,6 @@
     box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1);
     max-width: 500px;
     width: 100%;
-  }
-
-  flit-input {
-    padding-bottom: 1rem;
-    width: 468px;
-    z-index: 1;
   }
 
   #terms {

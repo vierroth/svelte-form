@@ -1,187 +1,154 @@
 import type { Action } from "svelte/action";
-import { flattenError, ZodType } from "zod";
+import {
+  type ZodType,
+  type output,
+  flattenError,
+  type ZodObject,
+  type ZodOptional,
+  type ZodNullable,
+  type ZodDefault,
+} from "zod";
 import equal from "fast-deep-equal";
-import { parseFormData } from "./parse-form-data.js";
+import { extractDefaults } from "./extract-defaults.js";
 
-type ToBoolean<T> = T extends Date
-  ? boolean
-  : T extends object
-    ? PropertiesToBoolean<T>
-    : boolean;
-
-type PropertiesToBoolean<T> = T extends any
-  ? any
-  : {
-      [K in keyof T]: ToBoolean<T[K]>;
-    };
-
-type ToStringArray<T> = T extends Date
+type FieldErrors<T> = (T extends Date
   ? string[] | undefined
   : T extends object
-    ? PropertiesToStringArray<T>
-    : string[] | undefined;
+    ? { [K in keyof T]: FieldErrors<T[K]> }
+    : string[] | undefined) & { submit?: string };
 
-type PropertiesToStringArray<T> = T extends any
-  ? any
-  : {
-      [K in keyof T]: ToStringArray<T[K]>;
-    };
-
-export function createForm<Schema extends ZodType>(props: {
-  schema: Schema;
-  initialValues?: Schema["_output"];
-  onSubmit?: (
-    data: Schema["_output"],
-  ) => Promise<void | boolean> | (void | boolean);
+export function createForm<S extends ZodType>(props: {
+  schema: S;
+  initialValues?: output<S>;
+  onSubmit?: (data: output<S>) => Promise<void | boolean> | (void | boolean);
   onSuccess?: () => Promise<void> | void;
-  onError?: (error: any) => Promise<void> | void;
+  onError?: (error: unknown) => Promise<void> | void;
 }) {
   let form: HTMLFormElement;
-  let lastUpdate: number = 0;
-  let data: any = $state({});
-  let errors: any = $state({});
-  let touched: any = $state({});
-  let isValid = $state(false);
-  let isDirty = $state(false);
+  let data: output<S> = $state({} as output<S>);
+  let errors = $state({} as FieldErrors<output<S>>);
+  let touched = $state({} as Record<string, unknown>);
   let isSubmitting = $state(false);
+  let isDirty = $state(false);
+  let isValid = $state(false);
 
-  const updateFormData = () => {
-    const timestamp = Date.now();
-    const newData = parseFormData(new FormData(form));
-    if (!equal(data, newData) && timestamp > lastUpdate) {
-      lastUpdate = timestamp;
-      data = newData;
-      isDirty = true;
+  let defaultData: output<S> = $state(
+    props.initialValues
+      ? structuredClone(props.initialValues)
+      : (extractDefaults(props.schema) as output<S>),
+  );
+
+  $effect(() => {
+    if (!isDirty) {
+      isDirty = !equal(data, defaultData);
     }
-  };
+  });
 
-  const handleFormChange = () => {
-    updateFormData();
-  };
+  $effect(() => {
+    const result = props.schema.safeParse(data);
 
-  const handleFormInput = () => {
-    updateFormData();
-  };
+    const fieldErrors = result.success
+      ? {}
+      : flattenError(result.error).fieldErrors;
+    errors = buildErrorsFromSchema(props.schema, fieldErrors, touched);
 
-  const handleFormBlur = (event: Event) => {
-    if (
-      event.target &&
-      "name" in event.target &&
-      typeof event.target.name === "string"
-    ) {
-      event.target.name.split(".").reduce((position, path, index, array) => {
-        if (index + 1 < array.length) {
-          if (
-            !(
-              (Array.isArray(position) &&
-                position.length > Number(path) &&
-                position[Number(path)]) ||
-              path in position
-            )
-          ) {
-            position[isNaN(Number(path)) ? path : Number(path)] = isNaN(
-              Number(array[index + 1]),
-            )
-              ? {}
-              : [];
-          }
-        } else {
-          if (!position[isNaN(Number(path)) ? path : Number(path)]) {
-            position[isNaN(Number(path)) ? path : Number(path)] = true;
-          }
-        }
+    isValid = result.success;
+  });
 
-        return position[isNaN(Number(path)) ? path : Number(path)];
-      }, touched);
+  const handleFormBlur = async (event: Event) => {};
+
+  function handleFormReset(event: Event) {
+    event.preventDefault();
+
+    if (isSubmitting) {
+      return;
     }
-  };
+
+    data = $state.snapshot(defaultData) as output<S>;
+    touched = {};
+  }
 
   const handleFormSubmit = async (event: Event) => {
     event.preventDefault();
-
     isSubmitting = true;
 
-    updateFormData();
+    try {
+      if (!isValid) {
+        await props.onError?.({});
+        return;
+      }
 
-    const vData = validate();
-    if (vData) {
       if (props.onSubmit) {
-        try {
-          await props.onSubmit(vData);
-          if (props.onSuccess) {
-            await props.onSuccess();
-          }
-        } catch (error: any) {
-          if (props.onError) {
-            await props.onError(error);
-          }
-        }
+        await props.onSubmit(data);
       } else {
         const response = await fetch("", {
           method: "POST",
           body: new FormData(form),
         });
-
-        if (response.ok) {
-          if (props.onSuccess) {
-            await props.onSuccess();
-          }
-        } else {
-          if (props.onError) {
-            await props.onError(response);
-          }
+        if (!response.ok) {
+          await props.onError?.(response);
+          return;
         }
       }
-    } else {
-      if (props.onError) {
-        await props.onError({});
+      await props.onSuccess?.();
+    } catch (error) {
+      await props.onError?.(error);
+    } finally {
+      isSubmitting = false;
+    }
+  };
+
+  function buildErrorsFromSchema(
+    schema: ZodType,
+    fieldErrors: any,
+    touchedFields: any,
+    path: string[] = [],
+  ): any {
+    // Unwrap optional, nullable, default wrappers
+    let innerSchema = schema;
+    while (true) {
+      if (
+        "unwrap" in innerSchema &&
+        typeof (innerSchema as any).unwrap === "function"
+      ) {
+        innerSchema = (
+          innerSchema as ZodOptional<any> | ZodNullable<any>
+        ).unwrap();
+      } else if (
+        "_def" in innerSchema &&
+        (innerSchema as any)._def?.innerType
+      ) {
+        innerSchema = (innerSchema as ZodDefault<any>).def.innerType;
+      } else {
+        break;
       }
     }
 
-    isSubmitting = false;
-  };
-
-  function map(errors: any, touched: any) {
+    // If it's an object schema, recurse into its shape
     if (
-      Object.prototype.toString.call(errors) === "[object Array]" &&
-      errors.length &&
-      typeof errors[0] === "string"
+      "shape" in innerSchema &&
+      typeof (innerSchema as any).shape === "object"
     ) {
-      return touched!! ? errors : undefined;
-    }
-
-    var diff: any = {};
-    for (var key in errors) {
-      var valueTouched = undefined;
-      if (touched[key] !== undefined) {
-        valueTouched = touched[key];
+      const shape = (innerSchema as ZodObject<any>).shape;
+      const result: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) {
+        result[key] = buildErrorsFromSchema(
+          shape[key],
+          fieldErrors?.[key],
+          touchedFields?.[key],
+          [...path, key],
+        );
       }
-
-      diff[key] = map(errors[key], valueTouched);
+      return result;
     }
 
-    return diff;
+    // Leaf field: return error if touched, undefined otherwise
+    if (Array.isArray(fieldErrors) && typeof fieldErrors[0] === "string") {
+      return touchedFields ? fieldErrors : undefined;
+    }
+
+    return undefined;
   }
-
-  let all = false;
-  const validate = (a?: boolean) => {
-    if (a) {
-      all = true;
-    }
-
-    const result = props.schema.safeParse(data);
-    if (result.success) {
-      isValid = true;
-      errors = {};
-      return result.data;
-    } else {
-      isValid = false;
-      errors = all
-        ? flattenError(result.error).fieldErrors
-        : map(flattenError(result.error).fieldErrors, touched);
-      return false;
-    }
-  };
 
   const action: Action = (node) => {
     if (!(node instanceof HTMLFormElement)) {
@@ -190,16 +157,14 @@ export function createForm<Schema extends ZodType>(props: {
 
     form = node;
 
-    node.addEventListener("input", handleFormInput);
-    node.addEventListener("change", handleFormChange);
     node.addEventListener("blur", handleFormBlur, true);
+    node.addEventListener("reset", handleFormReset);
     node.addEventListener("submit", handleFormSubmit);
 
     return {
       destroy() {
-        node.removeEventListener("input", handleFormInput);
-        node.removeEventListener("change", handleFormChange);
         node.removeEventListener("blur", handleFormBlur, true);
+        node.removeEventListener("reset", handleFormReset);
         node.removeEventListener("submit", handleFormSubmit);
       },
     };
@@ -207,11 +172,9 @@ export function createForm<Schema extends ZodType>(props: {
 
   if (props.initialValues) {
     data = props.initialValues;
+  } else {
+    data = extractDefaults(props.schema) as output<S>;
   }
-
-  $effect(() => {
-    validate();
-  });
 
   return {
     action,
@@ -219,16 +182,19 @@ export function createForm<Schema extends ZodType>(props: {
       form.requestSubmit();
     },
     reset() {
-      data = props.initialValues;
-      errors = {};
-      all = false;
-      isDirty = false;
+      form.requestReset();
     },
     get data() {
-      return data as Schema["_output"];
+      return data;
     },
     set data(v) {
       data = v;
+    },
+    get defaultData() {
+      return defaultData;
+    },
+    set defaultData(v) {
+      defaultData = v;
     },
     get touched() {
       return touched;
@@ -237,16 +203,13 @@ export function createForm<Schema extends ZodType>(props: {
       touched = v;
     },
     get errors() {
-      return errors as PropertiesToStringArray<Schema["_output"]>;
+      return errors;
     },
     get isValid() {
       return isValid;
     },
     get isDirty() {
       return isDirty;
-    },
-    set isDirty(v) {
-      isDirty = v;
     },
     get isSubmitting() {
       return isSubmitting;
