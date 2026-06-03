@@ -40,7 +40,7 @@
     },
   });
 
-  // $inspect(form)
+  // $inspect(form.touched)
 </script>
 
 <svelte:head>
@@ -61,7 +61,6 @@
       {#if form.errors.name}
         <p style="color: red;">{form.errors.name}</p>
       {/if}
-      <br />
       <label for="age">Age*</label>
       <input
         name="age"
@@ -72,7 +71,6 @@
       {#if form.errors.age}
         <p style="color: red;">{form.errors.age}</p>
       {/if}
-      <br />
       <label for="position">Position*</label>
       <input
         name="position"
@@ -83,7 +81,6 @@
       {#if form.errors.position}
         <p style="color: red;">{form.errors.position}</p>
       {/if}
-      <br />
       <label for="phoneNumber">Phone Number</label>
       <input
         name="phoneNumber"
@@ -92,18 +89,18 @@
         inputmode="tel"
         style="display: block"
       />
-      <br />
       <label for="eula">Term and Conditions</label>
       <input
         name="eula"
         bind:checked={form.data.eula}
         type="checkbox"
       />
-      <span id="terms"
-        >Click here to Accept <a href="/eula.pdf" target="_blank"
-          >Terms and Conditions</a
-        ></span
-      >
+      <span id="terms">
+       	Click here to Accept
+       	<a href="/eula.pdf" target="_blank">
+        Terms and Conditions
+        </a>
+      </span>
       {#if form.errors.submit}
         <span style="color: #d4514c">{@html form.errors.submit}</span>
         <br />
@@ -111,7 +108,7 @@
       {/if}
       <button
         type="submit"
-        disabled={form.isSubmitting || !form.isValid || null}
+
         style="display: block"
       >
       	{form.isSubmitting ? "Completing..." : "Complete"}
@@ -138,6 +135,12 @@
     margin-bottom: -20rem;
   }
 
+  form {
+	  display: flex;
+	  flex-direction: column;
+	  gap: 0.2rem;
+  }
+
   h1 {
     color: darkgray;
     font-size: 1.8rem;
@@ -161,15 +164,11 @@
     display: flex;
     flex-direction: row;
     gap: 0.2rem;
-    margin-top: -2.4rem;
+    margin-top: -1.2rem;
     padding-bottom: 1rem;
     position: relative;
     z-index: 1;
     pointer-events: none;
-
-    @media (max-width: 768px) {
-      flex-direction: column;
-    }
   }
 
   #terms a {
