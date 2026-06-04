@@ -40,7 +40,7 @@
     },
   });
 
-  // $inspect(form.touched)
+  $inspect(form);
 </script>
 
 <svelte:head>
@@ -108,7 +108,7 @@
       {/if}
       <button
         type="submit"
-
+        disabled={!form.isValid || form.isSubmitting}
         style="display: block"
       >
       	{form.isSubmitting ? "Completing..." : "Complete"}

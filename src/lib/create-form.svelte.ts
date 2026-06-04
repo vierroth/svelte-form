@@ -35,21 +35,31 @@ export function createForm<S extends $ZodType>(props: {
       isDirty = !equal(data, defaultData);
     }
 
-    touched = markChangedAsTouched(
+    const newTouched = markChangedAsTouched(
       props.schema,
       data,
       defaultData,
       untrack(() => touched),
     );
+
+    if (!equal(touched, newTouched)) {
+      touched = newTouched;
+    }
   });
 
   $effect(() => {
     const result = safeParse(props.schema, data);
 
     const issues = result.success ? [] : result.error.issues;
-    errors = errorsFromSchema(props.schema, issues, touched);
+    const newErrors = errorsFromSchema(props.schema, issues, touched);
 
-    isValid = result.success;
+    if (!equal(errors, newErrors)) {
+      errors = newErrors;
+    }
+
+    if (isValid !== result.success) {
+      isValid = result.success;
+    }
   });
 
   const handleFormBlur = async (event: Event) => {
