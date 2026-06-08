@@ -62,13 +62,21 @@ export function errorsFromSchema<S extends $ZodType>(
 
 		for (let i = 0; i < issue.path.length; i++) {
 			const key = issue.path[i];
+			const isLast = i === issue.path.length - 1;
 
-			if (i === issue.path.length - 1) {
+			if (isLast) {
 				if (!current[key]) current[key] = [];
 				current[key].push(issue.message);
-			} else {
-				current = current[key];
+				continue;
 			}
+
+			if (current[key] === undefined) {
+				const nextKey = issue.path[i + 1];
+
+				current[key] = typeof nextKey === "number" ? [] : {};
+			}
+
+			current = current[key];
 		}
 	}
 

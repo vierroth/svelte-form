@@ -28,12 +28,14 @@ export function createForm<S extends $ZodType>(props: {
 	let isValid = $state(false);
 	let isDirty = $derived(!equal(data, defaultData));
 
-	const fields = createFields(
-		() => data,
-		() => errors,
-		() => metadata,
-		() => defaultData,
-		() => wasSubmitted,
+	const fields = $derived(
+		createFields(
+			() => data,
+			() => errors,
+			() => metadata,
+			() => defaultData,
+			() => wasSubmitted,
+		),
 	);
 
 	$effect(() => {

@@ -1,8 +1,14 @@
 import type { Attachment } from "svelte/attachments";
 import equal from "fast-deep-equal";
 
-const getAtPath = (obj: any, path: (string | number)[]) =>
-	path.reduce((acc, key) => acc?.[key], obj);
+function getAtPath(obj: any, path: (string | number)[]) {
+	let current = obj;
+	for (const key of path) {
+		if (current == null) return undefined;
+		current = current[key];
+	}
+	return current;
+}
 
 type Field = {
 	readonly errors: string[] | undefined;
@@ -111,12 +117,13 @@ export function createFields<S>(
 		},
 		get dirty() {
 			const m = getMeta();
-			if (m?.dirty) return true;
 
 			const current = getAtPath(getRoot(), path);
 			const initial = getAtPath(getDefault(), path);
 
-			return !equal(current, initial);
+			const isNowDirty = !equal(current, initial);
+
+			return !!(m?.dirty || isNowDirty);
 		},
 		get blurred() {
 			return !!getMeta()?.blurred;
