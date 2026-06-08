@@ -14,7 +14,6 @@ type FormErrors<T> = FieldErrors<T> & {
 export function errorsFromSchema<S extends $ZodType>(
 	schema: S,
 	issues: $ZodIssue[] = [],
-	touched?: any,
 ): FormErrors<output<S>> {
 	function emptyFromSchema(schema: core.$ZodType): any {
 		let current: core.$ZodType = schema;
@@ -60,20 +59,15 @@ export function errorsFromSchema<S extends $ZodType>(
 
 	for (const issue of issues) {
 		let current = result;
-		let currentTouched = touched;
 
 		for (let i = 0; i < issue.path.length; i++) {
 			const key = issue.path[i];
 
 			if (i === issue.path.length - 1) {
-				const isTouched = currentTouched ? currentTouched?.[key] : true;
-				if (!isTouched) break;
-
 				if (!current[key]) current[key] = [];
 				current[key].push(issue.message);
 			} else {
 				current = current[key];
-				currentTouched = currentTouched?.[key];
 			}
 		}
 	}

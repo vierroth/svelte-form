@@ -1,48 +1,48 @@
 import { type output, safeParse } from "zod/v4-mini";
 import equal from "fast-deep-equal";
 import type { $ZodType } from "zod/v4/core";
-import { errorsFromSchema } from "./errors-from-schema.js";
 import { dataFromSchema } from "./data-from-schema.js";
 import type { Attachment } from "svelte/attachments";
-import { createFields } from "./create-fields.js";
 import { metadataFromSchema } from "./metadata-from-schema.js";
+import { errorsFromSchema } from "./errors-from-schema.js";
+import { createFields } from "./create-fields.js";
 
 export function createForm<S extends $ZodType>(props: {
 	schema: S;
 	initialValues?: output<S>;
 	onSubmit?: (data: output<S>) => Promise<void | boolean> | (void | boolean);
 	onSuccess?: () => Promise<void> | void;
-	onError?: (error: unknown) => Promise<void> | void;
+	onError?: () => Promise<void> | void;
 }) {
 	let form: HTMLFormElement;
 
 	let data = $state(dataFromSchema(props.schema, props.initialValues));
+	let metadata = $state(metadataFromSchema(props.schema));
+	let errors = $state(errorsFromSchema(props.schema));
+
 	let defaultData = $state<output<S>>($state.snapshot(data) as any);
 	let parsedData = $state<output<S>>();
-	let errors = $state(errorsFromSchema(props.schema));
-	let metadata = $state(metadataFromSchema(props.schema));
 
 	let isSubmitting = $state(false);
-	let isSubmitted = $state(false);
+	let wasSubmitted = $state(false);
 	let isValid = $state(false);
 	let isDirty = $derived(!equal(data, defaultData));
 
-	let fields = createFields(
+	const fields = createFields(
 		() => data,
 		() => errors,
 		() => metadata,
 		() => defaultData,
-		() => isSubmitted,
+		() => wasSubmitted,
 	);
 
 	$effect(() => {
 		const result = safeParse(props.schema, data);
 
-		parsedData = result.success ? result.data : (undefined as any);
+		parsedData = result.success ? result.data : undefined;
 
 		const issues = result.success ? [] : result.error.issues;
-		const newErrors = errorsFromSchema(props.schema, issues, metadata);
-
+		const newErrors = errorsFromSchema(props.schema, issues);
 		if (!equal(errors, newErrors)) {
 			errors = newErrors;
 		}
@@ -57,17 +57,9 @@ export function createForm<S extends $ZodType>(props: {
 
 		if (isSubmitting) return;
 
-		isSubmitted = false;
+		wasSubmitted = false;
 		data = dataFromSchema(props.schema, props.initialValues);
 		metadata = metadataFromSchema(props.schema);
-
-		fields = createFields(
-			() => data,
-			() => errors,
-			() => metadata,
-			() => defaultData,
-			() => isSubmitted,
-		);
 	}
 
 	const handleFormSubmit = async (event: Event) => {
@@ -76,13 +68,13 @@ export function createForm<S extends $ZodType>(props: {
 		if (isSubmitting) return;
 
 		isSubmitting = true;
-		isSubmitted = true;
+		wasSubmitted = true;
 
-		metadata = metadataFromSchema(props.schema, true);
+		metadata = metadataFromSchema(props.schema);
 
 		try {
 			if (!isValid) {
-				await props.onError?.(errors);
+				await props.onError?.();
 				return;
 			}
 
@@ -94,14 +86,14 @@ export function createForm<S extends $ZodType>(props: {
 					body: new FormData(form),
 				});
 				if (!response.ok) {
-					await props.onError?.(response);
+					await props.onError?.();
 					return;
 				}
 			}
 
 			await props.onSuccess?.();
 		} catch (error) {
-			await props.onError?.(error);
+			await props.onError?.();
 		} finally {
 			isSubmitting = false;
 		}
@@ -131,7 +123,10 @@ export function createForm<S extends $ZodType>(props: {
 		reset() {
 			form?.requestReset();
 		},
-		get fields() {
+		get data() {
+			return data;
+		},
+		get metadata() {
 			return fields;
 		},
 		get errors() {
@@ -143,12 +138,6 @@ export function createForm<S extends $ZodType>(props: {
 		set defaultData(v) {
 			defaultData = v;
 		},
-		get metadata() {
-			return metadata;
-		},
-		set metadata(v) {
-			metadata = v;
-		},
 		get isValid() {
 			return isValid;
 		},
@@ -157,6 +146,9 @@ export function createForm<S extends $ZodType>(props: {
 		},
 		get isSubmitting() {
 			return isSubmitting;
+		},
+		get wasSubmitted() {
+			return wasSubmitted;
 		},
 	};
 }

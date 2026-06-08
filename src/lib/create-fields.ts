@@ -1,36 +1,44 @@
-import equal from "fast-deep-equal";
 import type { Attachment } from "svelte/attachments";
+import equal from "fast-deep-equal";
 
-function getAtPath(obj: any, path: (string | number)[]) {
-	let current = obj;
-	for (const key of path) current = current?.[key];
-	return current;
-}
+const getAtPath = (obj: any, path: (string | number)[]) =>
+	path.reduce((acc, key) => acc?.[key], obj);
 
-function setAtPath(obj: any, path: (string | number)[], value: any) {
-	let current = obj;
-	for (let i = 0; i < path.length - 1; i++) {
-		current = current[path[i]];
-	}
-	current[path[path.length - 1]] = value;
-}
+type Field = {
+	readonly errors: string[] | undefined;
+	readonly dirty: boolean;
+	readonly blurred: boolean;
+	readonly attached: boolean;
+	readonly touched: boolean;
+	attachment: Attachment;
+};
 
-export function createFields<T>(
-	getRoot: () => T,
+type Fields<T> = T extends Date | File | Blob
+	? Field
+	: T extends Array<infer U>
+	  ? Fields<U>[]
+	  : T extends object
+	    ? { [K in keyof T]-?: Fields<T[K]> }
+	    : Field;
+
+const isLeaf = (v: any) =>
+	v instanceof Date || v instanceof File || v instanceof Blob;
+
+export function createFields<S>(
+	getRoot: () => S,
 	getErrors: () => any,
 	getMetadata: () => any,
-	getDefault: () => T,
+	getDefault: () => S,
 	getIsSubmitted: () => boolean,
 	path: (string | number)[] = [],
-	attachmentCache = new Map<string, Attachment>(),
-): any {
+	cache = new Map<string, Attachment>(),
+): Fields<S> {
 	const value = getAtPath(getRoot(), path);
+	const shape = getAtPath(getDefault(), path);
 
-	const isLeafObject =
-		value instanceof Date || value instanceof File || value instanceof Blob;
-
-	if (Array.isArray(value)) {
-		return value.map((_, i) =>
+	if (Array.isArray(shape)) {
+		const arr = Array.isArray(value) ? value : [];
+		return arr.map((_, i) =>
 			createFields(
 				getRoot,
 				getErrors,
@@ -38,105 +46,88 @@ export function createFields<T>(
 				getDefault,
 				getIsSubmitted,
 				[...path, i],
-				attachmentCache,
+				cache,
 			),
-		) as any;
+		) as unknown as Fields<S>;
 	}
 
-	if (typeof value === "object" && value !== null && !isLeafObject) {
-		const result: any = {};
-
-		for (const key in value) {
-			result[key] = createFields(
+	if (shape && typeof shape === "object" && !isLeaf(shape)) {
+		const out: any = {};
+		for (const k of Object.keys(shape)) {
+			out[k] = createFields(
 				getRoot,
 				getErrors,
 				getMetadata,
 				getDefault,
 				getIsSubmitted,
-				[...path, key],
-				attachmentCache,
+				[...path, k],
+				cache,
 			);
 		}
-
-		return result;
+		return out;
 	}
 
-	const keyPath = path.join(".");
+	const key = path.map(String).join(".");
 
-	if (!attachmentCache.has(keyPath)) {
-		attachmentCache.set(keyPath, (node: Element) => {
-			const handleBlur = () => {
-				const meta = getAtPath(getMetadata(), path);
-				if (meta) meta.blurred = true;
+	if (!cache.has(key)) {
+		cache.set(key, (node: Element) => {
+			const blur = () => {
+				const m = getAtPath(getMetadata(), path);
+				if (m) m.blurred = true;
 			};
-
-			const handleFocus = () => {
-				const meta = getAtPath(getMetadata(), path);
-				if (meta) meta.attached = true;
+			const focus = () => {
+				const m = getAtPath(getMetadata(), path);
+				if (m) m.attached = true;
 			};
-
-			node.addEventListener("blur", handleBlur, true);
-			node.addEventListener("focus", handleFocus, true);
-
+			node.addEventListener("blur", blur, true);
+			node.addEventListener("focus", focus, true);
 			return () => {
-				node.removeEventListener("blur", handleBlur, true);
-				node.removeEventListener("focus", handleFocus, true);
+				node.removeEventListener("blur", blur, true);
+				node.removeEventListener("focus", focus, true);
 			};
 		});
 	}
 
+	const getMeta = () => getAtPath(getMetadata(), path);
+
+	const getErrorsAtPath = (): string[] | undefined => {
+		const e = getAtPath(getErrors(), path);
+		if (!e) return undefined;
+		return Array.isArray(e) ? e : [e];
+	};
+
 	return {
-		get value() {
-			return getAtPath(getRoot(), path);
+		get errors() {
+			const e = getErrorsAtPath();
+			if (!e?.length) return e;
+
+			const m = getMeta();
+
+			if (getIsSubmitted()) return e;
+
+			if (m?.attached) return m.blurred ? e : undefined;
+
+			return m?.dirty ? e : undefined;
 		},
-
-		set value(v: any) {
-			const current = getAtPath(getRoot(), path);
-
-			if (!equal(current, v)) {
-				setAtPath(getRoot(), path, v);
-
-				const meta = getAtPath(getMetadata(), path);
-				const initial = getAtPath(getDefault(), path);
-
-				if (meta && !meta.dirty && !equal(v, initial)) {
-					meta.dirty = true;
-				}
-			}
-		},
-
-		get error() {
-			const error = getAtPath(getErrors(), path);
-			if (!error) return error;
-
-			const meta = getAtPath(getMetadata(), path);
-
-			if (getIsSubmitted()) return error;
-
-			if (meta?.attached) {
-				return meta.blurred ? error : undefined;
-			}
-
-			return meta?.dirty ? error : undefined;
-		},
-
 		get dirty() {
-			return getAtPath(getMetadata(), path)?.dirty;
-		},
+			const m = getMeta();
+			if (m?.dirty) return true;
 
+			const current = getAtPath(getRoot(), path);
+			const initial = getAtPath(getDefault(), path);
+
+			return !equal(current, initial);
+		},
 		get blurred() {
-			return getAtPath(getMetadata(), path)?.blurred;
+			return !!getMeta()?.blurred;
 		},
-
 		get attached() {
-			return getAtPath(getMetadata(), path)?.attached;
+			return !!getMeta()?.attached;
 		},
-
 		get touched() {
-			const m = getAtPath(getMetadata(), path);
-			return m?.dirty || m?.blurred || m?.attached;
+			const m = getMeta();
+			return !!(m?.dirty || m?.blurred || m?.attached);
 		},
-
-		attachment: attachmentCache.get(keyPath)!,
-	} as any;
+		attachment: cache.get(key)!,
+	} as unknown as Fields<S>;
 }

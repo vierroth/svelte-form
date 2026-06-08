@@ -32,12 +32,13 @@
 		onSuccess() {
 			// location.reload();
 		},
-		onError(error: any) {
-			console.log(error);
+		onError() {
+			console.log("error");
 		},
 	});
 
-	$inspect(form.fields);
+	$inspect(form.data);
+	$inspect(form.metadata);
 </script>
 
 <svelte:head>
@@ -51,61 +52,61 @@
 			<label for="name">Full Name*</label>
 			<input
 				name="name"
-				bind:value={form.fields.name.value}
+				bind:value={form.data.name}
 				type="text"
 				style="display: block"
-				{@attach form.fields.name.attachment}
+				{@attach form.metadata.name.attachment}
 			/>
-			{#if form.fields.name.error}
-				<p style="color: red;">{form.fields.name.error}</p>
+			{#if form.metadata.name.errors}
+				<p style="color: red;">{form.metadata.name.errors}</p>
 			{/if}
 			<label for="age">Age*</label>
 			<input
 				name="age"
-				bind:value={form.fields.age.value}
+				bind:value={form.data.age}
 				type="text"
 				style="display: block"
-				{@attach form.fields.age.attachment}
+				{@attach form.metadata.age.attachment}
 			/>
-			{#if form.fields.age.error}
-				<p style="color: red;">{form.fields.age.error}</p>
+			{#if form.metadata.age.errors}
+				<p style="color: red;">{form.metadata.age.errors}</p>
 			{/if}
 			<label for="position">Position*</label>
 			<input
 				name="position"
-				bind:value={form.fields.position.value}
+				bind:value={form.data.position}
 				type="text"
 				style="display: block"
-				{@attach form.fields.position.attachment}
+				{@attach form.metadata.position.attachment}
 			/>
-			{#if form.fields.position.error}
-				<p style="color: red;">{form.fields.position.error}</p>
+			{#if form.metadata.position.errors}
+				<p style="color: red;">{form.metadata.position.errors}</p>
 			{/if}
 			<label for="phoneNumber">Phone Number</label>
 			<input
 				name="phoneNumber"
-				bind:value={form.fields.phoneNumber.value}
+				bind:value={form.data.phoneNumber}
 				type="text"
 				inputmode="tel"
 				style="display: block"
-				{@attach form.fields.phoneNumber.attachment}
+				{@attach form.metadata.phoneNumber.attachment}
 			/>
 			<label for="eula">Term and Conditions</label>
 			<input
 				name="eula"
-				bind:checked={form.fields.eula.value}
+				bind:checked={form.data.eula}
 				type="checkbox"
-				{@attach form.fields.eula.attachment}
+				{@attach form.metadata.eula.attachment}
 			/>
 			<span id="terms">
 				Click here to Accept
 				<a href="/eula.pdf" target="_blank"> Terms and Conditions </a>
 			</span>
-			{#if form.errors.submit}
+			<!-- {#if form.errors.submit}
 				<span style="color: #d4514c">{@html form.errors.submit}</span>
 				<br />
 				<br />
-			{/if}
+			{/if} -->
 			<button
 				type="submit"
 				disabled={!form.isValid || form.isSubmitting}
