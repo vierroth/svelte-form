@@ -1,48 +1,82 @@
 import type { $ZodIssue, $ZodType, output } from "zod/v4/core";
-import { dataFromSchema } from "./data-from-schema.js";
+import type { core } from "zod/v4-mini";
 
 type FieldErrors<T> = T extends Array<infer U>
-  ? FieldErrors<U>[]
-  : T extends object
-    ? { [K in keyof T]: FieldErrors<T[K]> }
-    : string[] | undefined;
+	? FieldErrors<U>[]
+	: T extends object
+	  ? { [K in keyof T]: FieldErrors<T[K]> }
+	  : string[] | undefined;
 
 type FormErrors<T> = FieldErrors<T> & {
-  submit?: string;
+	submit?: string;
 };
 
 export function errorsFromSchema<S extends $ZodType>(
-  schema: S,
-  issues: $ZodIssue[] = [],
-  touched?: any,
+	schema: S,
+	issues: $ZodIssue[] = [],
+	touched?: any,
 ): FormErrors<output<S>> {
-  // ✅ build full structure first
-  const result: any = dataFromSchema(schema);
+	function emptyFromSchema(schema: core.$ZodType): any {
+		let current: core.$ZodType = schema;
 
-  for (const issue of issues) {
-    let current = result;
-    let currentTouched = touched;
+		while (true) {
+			const def = current._zod.def;
 
-    for (let i = 0; i < issue.path.length; i++) {
-      const key = issue.path[i];
+			if (
+				(def.type === "optional" ||
+					def.type === "nullable" ||
+					def.type === "default" ||
+					def.type === "catch") &&
+				"innerType" in def &&
+				def.innerType
+			) {
+				current = def.innerType as core.$ZodType;
+			} else {
+				break;
+			}
+		}
 
-      if (i === issue.path.length - 1) {
-        const isTouched = currentTouched ? currentTouched?.[key] : true;
+		const def = current._zod.def;
 
-        if (!isTouched) break;
+		if (def.type === "object") {
+			const shape = (def as any).shape as Record<string, core.$ZodType>;
+			const result: Record<string, any> = {};
 
-        if (!current[key]) current[key] = [];
+			for (const key of Object.keys(shape)) {
+				result[key] = emptyFromSchema(shape[key]);
+			}
 
-        current[key] = current[key] ?? [];
-        current[key].push(issue.message);
-      } else {
-        current[key] = current[key] ?? {};
-        current = current[key];
+			return result;
+		}
 
-        currentTouched = currentTouched?.[key];
-      }
-    }
-  }
+		if (def.type === "array") {
+			return [];
+		}
 
-  return result;
+		return undefined;
+	}
+
+	const result: any = emptyFromSchema(schema);
+
+	for (const issue of issues) {
+		let current = result;
+		let currentTouched = touched;
+
+		for (let i = 0; i < issue.path.length; i++) {
+			const key = issue.path[i];
+
+			if (i === issue.path.length - 1) {
+				const isTouched = currentTouched ? currentTouched?.[key] : true;
+				if (!isTouched) break;
+
+				if (!current[key]) current[key] = [];
+				current[key].push(issue.message);
+			} else {
+				current = current[key];
+				currentTouched = currentTouched?.[key];
+			}
+		}
+	}
+
+	return result;
 }
