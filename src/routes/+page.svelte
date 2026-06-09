@@ -4,13 +4,19 @@
 
 	const form = createForm({
 		schema: z.object({
-			name: z
-				.string()
-				.trim()
-				.regex(/^[A-Za-z ]*$/, "Can only contain letters and spaces")
-				.min(1, "Required")
-				.max(80, "Can't be longer then 80 characters")
-				.default("Default"),
+			test: z._default(
+				z.array(
+					z.object({
+						name: z
+							.string()
+							.trim()
+							.regex(/^[A-Za-z ]*$/, "Can only contain letters and spaces")
+							.min(1, "Required")
+							.max(80, "Can't be longer then 80 characters"),
+					}),
+				),
+				[{ name: "123" }],
+			),
 			age: z.coerce.number().int().positive(),
 			position: z
 				.string()
@@ -37,7 +43,6 @@
 		},
 	});
 
-	$inspect(form.data);
 	$inspect(form.metadata);
 </script>
 
@@ -52,13 +57,13 @@
 			<label for="name">Full Name*</label>
 			<input
 				name="name"
-				bind:value={form.data.name}
+				bind:value={form.data.test[0].name}
 				type="text"
 				style="display: block"
-				{@attach form.metadata.name.attachment}
+				{@attach form.metadata.test[0].name.attachment}
 			/>
-			{#if form.metadata.name.errors}
-				<p style="color: red;">{form.metadata.name.errors}</p>
+			{#if form.metadata.test[0].name.errors}
+				<p style="color: red;">{form.metadata.test[0].name.errors}</p>
 			{/if}
 			<label for="age">Age*</label>
 			<input

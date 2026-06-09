@@ -28,15 +28,25 @@ export function createForm<S extends $ZodType>(props: {
 	let isValid = $state(false);
 	let isDirty = $derived(!equal(data, defaultData));
 
-	const fields = $derived(
-		createFields(
-			() => data,
-			() => errors,
-			() => metadata,
-			() => defaultData,
-			() => wasSubmitted,
-		),
-	);
+	const state = {
+		get data() {
+			return data;
+		},
+		get errors() {
+			return errors;
+		},
+		get metadata() {
+			return metadata;
+		},
+		get defaultData() {
+			return defaultData;
+		},
+		get wasSubmitted() {
+			return wasSubmitted;
+		},
+	};
+
+	const fields = createFields(props.schema, state);
 
 	$effect(() => {
 		const result = safeParse(props.schema, data);
@@ -45,6 +55,7 @@ export function createForm<S extends $ZodType>(props: {
 
 		const issues = result.success ? [] : result.error.issues;
 		const newErrors = errorsFromSchema(props.schema, issues);
+
 		if (!equal(errors, newErrors)) {
 			errors = newErrors;
 		}
@@ -94,7 +105,7 @@ export function createForm<S extends $ZodType>(props: {
 			}
 
 			await props.onSuccess?.();
-		} catch (error) {
+		} catch {
 			await props.onError?.();
 		} finally {
 			isSubmitting = false;
