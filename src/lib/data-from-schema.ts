@@ -8,78 +8,78 @@ export function dataFromSchema<S extends $ZodType>(
 	data?: output<S>,
 ): output<S> {
 	let current: $ZodType = schema;
-	let defaultValue: unknown = undefined;
+	let defaultValue: unknown;
+	let isOptional = false;
 
 	while (true) {
 		const def = current._zod.def;
 
-		const isWrapper =
-			def.type === "optional" ||
-			def.type === "nullable" ||
-			def.type === "default" ||
-			def.type === "catch";
+		if (def.type === "optional") isOptional = true;
 
-		if (isWrapper && "innerType" in def && def.innerType) {
-			const inner = def.innerType as $ZodType;
-			const innerDef = inner._zod.def;
-
-			if (
-				def.type === "optional" &&
-				(innerDef.type === "object" || innerDef.type === "array")
-			) {
-				return undefined as output<S>;
-			}
-
-			if ("defaultValue" in def && def.defaultValue !== undefined) {
-				defaultValue = def.defaultValue;
-			}
-
-			current = inner;
-		} else {
-			break;
+		if ("defaultValue" in def && def.defaultValue !== undefined) {
+			defaultValue = def.defaultValue;
 		}
-	}
 
-	if (data === undefined && defaultValue !== undefined) {
-		data = defaultValue as output<S>;
+		if (
+			(def.type === "optional" ||
+				def.type === "nullable" ||
+				def.type === "default" ||
+				def.type === "catch") &&
+			"innerType" in def &&
+			def.innerType
+		) {
+			current = def.innerType as $ZodType;
+			continue;
+		}
+
+		break;
 	}
 
 	const def = current._zod.def;
 
+	if (data === undefined) {
+		if (defaultValue !== undefined) {
+			data = defaultValue as output<S>;
+		} else if (isOptional && (def.type === "object" || def.type === "array")) {
+			return undefined as output<S>;
+		}
+	}
+
 	if (def.type === "object" && "shape" in def && def.shape) {
 		const shape = def.shape as Record<string, $ZodType>;
 
-		const result: Record<string, unknown> = {};
 		const dataObj =
-			typeof data === "object" && data !== null && !Array.isArray(data)
+			data && typeof data === "object" && !Array.isArray(data)
 				? (data as Record<string, unknown>)
-				: {};
+				: undefined;
 
-		for (const key of Object.keys(shape)) {
-			result[key] = dataFromSchema(
-				shape[key] as any,
-				dataObj[key] === undefined ? undefined : dataObj[key],
-			);
+		const result: Record<string, unknown> = dataObj ? { ...dataObj } : {};
+
+		for (const key in shape) {
+			const value = dataObj?.[key];
+
+			if (value === undefined) {
+				const generated = dataFromSchema(shape[key] as any, undefined);
+				if (generated !== undefined) result[key] = generated;
+			} else {
+				result[key] = dataFromSchema(shape[key] as any, value as any);
+			}
 		}
 
 		return result as output<S>;
 	}
 
 	if (def.type === "array" && "element" in def && def.element) {
-		const elementSchema = def.element as $ZodType;
+		const element = def.element as $ZodType;
 
-		let dataArray: unknown[];
+		const arr = Array.isArray(data)
+			? data
+			: data === undefined && defaultValue !== undefined
+			  ? (defaultValue as unknown[])
+			  : [];
 
-		if (data === undefined && defaultValue !== undefined) {
-			dataArray = defaultValue as unknown[];
-		} else if (Array.isArray(data)) {
-			dataArray = data;
-		} else {
-			dataArray = [];
-		}
-
-		return dataArray.map((item) =>
-			dataFromSchema(elementSchema as any, item as any),
+		return arr.map((item) =>
+			dataFromSchema(element as any, item as any),
 		) as output<S>;
 	}
 
