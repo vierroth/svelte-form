@@ -1,4 +1,4 @@
-import type { core } from "zod/v4-mini";
+import type { core } from "zod/mini";
 import type { output } from "zod/v4/core";
 
 type $ZodType = core.$ZodType;
@@ -13,19 +13,28 @@ export function dataFromSchema<S extends $ZodType>(
 	while (true) {
 		const def = current._zod.def;
 
-		if ("defaultValue" in def && def.defaultValue !== undefined) {
-			defaultValue = def.defaultValue;
-		}
+		const isWrapper =
+			def.type === "optional" ||
+			def.type === "nullable" ||
+			def.type === "default" ||
+			def.type === "catch";
 
-		if (
-			(def.type === "optional" ||
-				def.type === "nullable" ||
-				def.type === "default" ||
-				def.type === "catch") &&
-			"innerType" in def &&
-			def.innerType
-		) {
-			current = def.innerType as $ZodType;
+		if (isWrapper && "innerType" in def && def.innerType) {
+			const inner = def.innerType as $ZodType;
+			const innerDef = inner._zod.def;
+
+			if (
+				def.type === "optional" &&
+				(innerDef.type === "object" || innerDef.type === "array")
+			) {
+				return undefined as output<S>;
+			}
+
+			if ("defaultValue" in def && def.defaultValue !== undefined) {
+				defaultValue = def.defaultValue;
+			}
+
+			current = inner;
 		} else {
 			break;
 		}

@@ -1,35 +1,17 @@
 <script lang="ts">
 	import { createForm } from "$lib/index.js";
-	import { z } from "zod";
+	import { z } from "zod/mini";
+	import List from "./list.svelte";
 
 	const form = createForm({
 		schema: z.object({
-			test: z._default(
-				z.array(
-					z.object({
-						name: z
-							.string()
-							.trim()
-							.regex(/^[A-Za-z ]*$/, "Can only contain letters and spaces")
-							.min(1, "Required")
-							.max(80, "Can't be longer then 80 characters"),
-					}),
-				),
-				[{ name: "123" }],
+			items: z.array(
+				z.object({
+					title: z.string(),
+				}),
 			),
-			age: z.coerce.number().int().positive(),
-			position: z
-				.string()
-				.trim()
-				.regex(/^[A-Za-z ]*$/, "Can only contain letters and spaces")
-				.min(1, "Required")
-				.max(20, "Can't be longer then 20 characters"),
-			phoneNumber: z
-				.string()
-				.trim()
-				.regex(/^[0-9+ -]*$/, "Can only contain numbers and +/-")
-				.max(20, "Can't be longer then 20 characters")
-				.optional(),
+			position: z.string(),
+			phoneNumber: z.string(),
 			eula: z.literal(true),
 		}),
 		async onSubmit(formData) {
@@ -43,7 +25,7 @@
 		},
 	});
 
-	$inspect(form.metadata);
+	$inspect(form.data);
 </script>
 
 <svelte:head>
@@ -54,28 +36,7 @@
 	<h1>Complete Your Profile</h1>
 	<div class="complete">
 		<form {@attach form.attachment}>
-			<label for="name">Full Name*</label>
-			<input
-				name="name"
-				bind:value={form.data.test[0].name}
-				type="text"
-				style="display: block"
-				{@attach form.metadata.test[0].name.attachment}
-			/>
-			{#if form.metadata.test[0].name.errors}
-				<p style="color: red;">{form.metadata.test[0].name.errors}</p>
-			{/if}
-			<label for="age">Age*</label>
-			<input
-				name="age"
-				bind:value={form.data.age}
-				type="text"
-				style="display: block"
-				{@attach form.metadata.age.attachment}
-			/>
-			{#if form.metadata.age.errors}
-				<p style="color: red;">{form.metadata.age.errors}</p>
-			{/if}
+			<List bind:items={form.data.items} />
 			<label for="position">Position*</label>
 			<input
 				name="position"
@@ -119,7 +80,7 @@
 			>
 				{form.isSubmitting ? "Completing..." : "Complete"}
 			</button>
-			<button type="reset" style="display: block"> Reset </button>
+			<button type="reset" style="display: block">Reset</button>
 		</form>
 	</div>
 </div>

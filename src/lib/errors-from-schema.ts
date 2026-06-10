@@ -1,5 +1,5 @@
 import type { $ZodIssue, $ZodType, output } from "zod/v4/core";
-import type { core } from "zod/v4-mini";
+import type { core } from "zod/mini";
 
 type FieldErrors<T> = T extends Array<infer U>
 	? FieldErrors<U>[]

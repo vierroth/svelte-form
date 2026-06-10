@@ -1,4 +1,4 @@
-import { type output, safeParse } from "zod/v4-mini";
+import { type output, safeParse } from "zod/mini";
 import equal from "fast-deep-equal";
 import type { $ZodType } from "zod/v4/core";
 import { dataFromSchema } from "./data-from-schema.js";
@@ -6,6 +6,7 @@ import type { Attachment } from "svelte/attachments";
 import { metadataFromSchema } from "./metadata-from-schema.js";
 import { errorsFromSchema } from "./errors-from-schema.js";
 import { createFields } from "./create-fields.js";
+import { untrack } from "svelte";
 
 export function createForm<S extends $ZodType>(props: {
 	schema: S;
@@ -56,7 +57,12 @@ export function createForm<S extends $ZodType>(props: {
 		const issues = result.success ? [] : result.error.issues;
 		const newErrors = errorsFromSchema(props.schema, issues);
 
-		if (!equal(errors, newErrors)) {
+		if (
+			!equal(
+				untrack(() => errors),
+				newErrors,
+			)
+		) {
 			errors = newErrors;
 		}
 
