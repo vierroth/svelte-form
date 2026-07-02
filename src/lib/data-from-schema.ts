@@ -10,13 +10,11 @@ export function dataFromSchema<S extends $ZodType>(
 	let current: $ZodType = schema;
 	let defaultValue: unknown;
 	let hasDefault = false;
-	let isOptional = false;
 	let isNullable = false;
 
 	while (true) {
 		const def = current._zod.def;
 
-		if (def.type === "optional") isOptional = true;
 		if (def.type === "nullable") isNullable = true;
 
 		if ("defaultValue" in def && def.defaultValue !== undefined) {
@@ -44,14 +42,8 @@ export function dataFromSchema<S extends $ZodType>(
 
 	const def = current._zod.def;
 
-	if (data === undefined) {
-		if (hasDefault) {
-			data = defaultValue as output<S>;
-		} else if (isOptional && (def.type === "object" || def.type === "array")) {
-			return undefined as output<S>;
-		} else if (isNullable) {
-			return null as output<S>;
-		}
+	if (data === undefined && hasDefault) {
+		data = defaultValue as output<S>;
 	}
 
 	if (def.type === "object" && "shape" in def && def.shape) {
@@ -62,17 +54,10 @@ export function dataFromSchema<S extends $ZodType>(
 				? (data as Record<string, unknown>)
 				: undefined;
 
-		const result: Record<string, unknown> = dataObj ? { ...dataObj } : {};
+		const result: Record<string, unknown> = {};
 
 		for (const key in shape) {
-			const value = dataObj?.[key];
-
-			if (value === undefined) {
-				const generated = dataFromSchema(shape[key] as any, undefined);
-				if (generated !== undefined) result[key] = generated;
-			} else {
-				result[key] = dataFromSchema(shape[key] as any, value as any);
-			}
+			result[key] = dataFromSchema(shape[key] as any, dataObj?.[key] as any);
 		}
 
 		return result as output<S>;
@@ -86,6 +71,10 @@ export function dataFromSchema<S extends $ZodType>(
 		return arr.map((item) =>
 			dataFromSchema(element as any, item as any),
 		) as output<S>;
+	}
+
+	if (data === undefined && isNullable) {
+		return null as output<S>;
 	}
 
 	return data as output<S>;

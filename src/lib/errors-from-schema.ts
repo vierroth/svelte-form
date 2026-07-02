@@ -37,7 +37,7 @@ export function errorsFromSchema<S extends $ZodType>(
 
 		const def = current._zod.def;
 
-		if (def.type === "object") {
+		if (def.type === "object" && "shape" in def && (def as any).shape) {
 			const shape = (def as any).shape as Record<string, core.$ZodType>;
 			const result: Record<string, any> = {};
 
