@@ -3,7 +3,7 @@ import equal from "fast-deep-equal";
 import type { output } from "zod";
 import type { $ZodType } from "zod/v4/core";
 
-function getAtPath(obj: any, path: (string | number)[]) {
+function getAtPath(obj: any, path: (string | number)[]): any {
 	let current = obj;
 	for (const key of path) {
 		if (current == null) return undefined;
@@ -12,27 +12,16 @@ function getAtPath(obj: any, path: (string | number)[]) {
 	return current;
 }
 
-function ensurePath(obj: any, path: (string | number)[]) {
+function ensurePath(obj: any, path: (string | number)[]): any {
 	let current = obj;
-
 	for (let i = 0; i < path.length; i++) {
 		const key = path[i];
 		const nextKey = path[i + 1];
-
-		if (typeof key === "number") {
-			if (!Array.isArray(current)) return undefined;
-			if (current[key] == null) {
-				current[key] = typeof nextKey === "number" ? [] : {};
-			}
-		} else {
-			if (current[key] == null) {
-				current[key] = typeof nextKey === "number" ? [] : {};
-			}
+		if (current[key] == null) {
+			current[key] = typeof nextKey === "number" ? [] : {};
 		}
-
 		current = current[key];
 	}
-
 	return current;
 }
 
@@ -40,7 +29,7 @@ type Field = {
 	readonly errors: string[] | undefined;
 	readonly dirty: boolean;
 	readonly blurred: boolean;
-	readonly attached: boolean;
+	readonly focused: boolean;
 	readonly touched: boolean;
 	attachment: Attachment;
 };
@@ -48,10 +37,10 @@ type Field = {
 type Fields<T> = T extends Date | File | Blob
 	? Field
 	: T extends Array<infer U>
-	  ? Fields<U>[]
-	  : T extends object
-	    ? { [K in keyof T]-?: Fields<T[K]> }
-	    : Field;
+		? Fields<U>[]
+		: T extends object
+			? { [K in keyof T]-?: Fields<T[K]> }
+			: Field;
 
 type FormState<S extends $ZodType> = {
 	data: output<S>;
@@ -61,7 +50,7 @@ type FormState<S extends $ZodType> = {
 	wasSubmitted: boolean;
 };
 
-const unwrap = (schema: any) => {
+const unwrap = (schema: any): any => {
 	let current = schema;
 	while (true) {
 		const def = current?._zod?.def;
@@ -80,20 +69,19 @@ const unwrap = (schema: any) => {
 	}
 };
 
-function getSchemaAtPath(schema: any, path: (string | number)[]) {
-	let current = schema;
+function getSchemaAtPath(schema: any, path: (string | number)[]): any {
+	let current = unwrap(schema);
 	for (const key of path) {
-		current = unwrap(current);
 		const def = current?._zod?.def;
 		if (def?.type === "object") {
-			current = (def as any).shape[key];
+			current = unwrap((def as any).shape[key]);
 		} else if (def?.type === "array") {
-			current = def.element;
+			current = unwrap(def.element);
 		} else {
 			return current;
 		}
 	}
-	return unwrap(current);
+	return current;
 }
 
 export function createFields<S extends $ZodType>(
@@ -109,12 +97,44 @@ export function createFields<S extends $ZodType>(
 		return new Proxy([] as any, {
 			get(_, key) {
 				const arr = getAtPath(state.data, path);
+				const length = Array.isArray(arr) ? arr.length : 0;
+
 				if (key === "length") {
-					return Array.isArray(arr) ? arr.length : 0;
+					return length;
 				}
-				if (typeof key === "string" && !isNaN(Number(key))) {
+
+				if (key === Symbol.iterator) {
+					return function* () {
+						for (let i = 0; i < length; i++) {
+							yield createFields(schema, state, [...path, i], cache);
+						}
+					};
+				}
+
+				if (typeof key === "string" && /^\d+$/.test(key)) {
 					return createFields(schema, state, [...path, Number(key)], cache);
 				}
+
+				if (key === "map") {
+					return (fn: (item: any, index: number) => any) => {
+						const result = [];
+						for (let i = 0; i < length; i++) {
+							result.push(
+								fn(createFields(schema, state, [...path, i], cache), i),
+							);
+						}
+						return result;
+					};
+				}
+
+				if (key === "forEach") {
+					return (fn: (item: any, index: number) => void) => {
+						for (let i = 0; i < length; i++) {
+							fn(createFields(schema, state, [...path, i], cache), i);
+						}
+					};
+				}
+
 				return undefined;
 			},
 		}) as unknown as Fields<output<S>>;
@@ -129,13 +149,19 @@ export function createFields<S extends $ZodType>(
 		return out;
 	}
 
-	const key = path.join(".");
+	const key = path.map((p) => (typeof p === "number" ? `[${p}]` : p)).join("/");
 
 	if (!cache.has(key)) {
 		cache.set(key, (node: Element) => {
-			const blur = () => (ensurePath(state.metadata, path).blurred = true);
-			const focus = () => (ensurePath(state.metadata, path).attached = true);
-			const input = () => (ensurePath(state.metadata, path).dirty = true);
+			const blur = () => {
+				ensurePath(state.metadata, path).blurred = true;
+			};
+			const focus = () => {
+				ensurePath(state.metadata, path).focused = true;
+			};
+			const input = () => {
+				ensurePath(state.metadata, path).dirty = true;
+			};
 
 			node.addEventListener("blur", blur, true);
 			node.addEventListener("focus", focus, true);
@@ -164,7 +190,7 @@ export function createFields<S extends $ZodType>(
 
 			if (!errors?.length) return errors;
 			if (state.wasSubmitted) return errors;
-			if (m?.attached) return m.blurred ? errors : undefined;
+			if (m?.focused) return m.blurred ? errors : undefined;
 			return m?.dirty ? errors : undefined;
 		},
 
@@ -179,13 +205,13 @@ export function createFields<S extends $ZodType>(
 			return !!getAtPath(state.metadata, path)?.blurred;
 		},
 
-		get attached() {
-			return !!getAtPath(state.metadata, path)?.attached;
+		get focused() {
+			return !!getAtPath(state.metadata, path)?.focused;
 		},
 
 		get touched() {
 			const m = getAtPath(state.metadata, path);
-			return !!(m?.dirty || m?.blurred || m?.attached);
+			return !!(m?.dirty || m?.blurred || m?.focused);
 		},
 
 		attachment,

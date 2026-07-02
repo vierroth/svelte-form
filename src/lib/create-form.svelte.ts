@@ -15,7 +15,7 @@ export function createForm<S extends $ZodType>(props: {
 	onSuccess?: () => Promise<void> | void;
 	onError?: () => Promise<void> | void;
 }) {
-	let form: HTMLFormElement;
+	let form: HTMLFormElement | undefined;
 
 	let data = $state(dataFromSchema(props.schema, props.initialValues));
 	let metadata = $state(metadataFromSchema(props.schema));
@@ -52,23 +52,20 @@ export function createForm<S extends $ZodType>(props: {
 	$effect(() => {
 		const result = safeParse(props.schema, data);
 
-		parsedData = result.success ? result.data : undefined;
+		untrack(() => {
+			parsedData = result.success ? result.data : undefined;
 
-		const issues = result.success ? [] : result.error.issues;
-		const newErrors = errorsFromSchema(props.schema, issues);
+			const issues = result.success ? [] : result.error.issues;
+			const newErrors = errorsFromSchema(props.schema, issues);
 
-		if (
-			!equal(
-				untrack(() => errors),
-				newErrors,
-			)
-		) {
-			errors = newErrors;
-		}
+			if (!equal(errors, newErrors)) {
+				errors = newErrors;
+			}
 
-		if (isValid !== result.success) {
-			isValid = result.success;
-		}
+			if (isValid !== result.success) {
+				isValid = result.success;
+			}
+		});
 	});
 
 	function handleFormReset(event: Event) {
@@ -97,9 +94,21 @@ export function createForm<S extends $ZodType>(props: {
 				return;
 			}
 
-			if (props.onSubmit && parsedData) {
-				await props.onSubmit(parsedData);
+			if (props.onSubmit) {
+				if (parsedData === undefined) {
+					await props.onError?.();
+					return;
+				}
+				const result = await props.onSubmit(parsedData);
+				if (result === false) {
+					await props.onError?.();
+					return;
+				}
 			} else {
+				if (!form) {
+					await props.onError?.();
+					return;
+				}
 				const response = await fetch("", {
 					method: "POST",
 					body: new FormData(form),
@@ -120,7 +129,7 @@ export function createForm<S extends $ZodType>(props: {
 
 	const attachment: Attachment = (node) => {
 		if (!(node instanceof HTMLFormElement)) {
-			throw new Error();
+			throw new Error("Form attachment must be used on a <form> element.");
 		}
 
 		form = node;
@@ -131,6 +140,7 @@ export function createForm<S extends $ZodType>(props: {
 		return () => {
 			node.removeEventListener("reset", handleFormReset);
 			node.removeEventListener("submit", handleFormSubmit);
+			form = undefined;
 		};
 	};
 
@@ -140,7 +150,7 @@ export function createForm<S extends $ZodType>(props: {
 			form?.requestSubmit();
 		},
 		reset() {
-			form?.requestReset();
+			form?.reset();
 		},
 		get data() {
 			return data;

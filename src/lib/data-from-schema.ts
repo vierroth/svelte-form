@@ -9,15 +9,22 @@ export function dataFromSchema<S extends $ZodType>(
 ): output<S> {
 	let current: $ZodType = schema;
 	let defaultValue: unknown;
+	let hasDefault = false;
 	let isOptional = false;
+	let isNullable = false;
 
 	while (true) {
 		const def = current._zod.def;
 
 		if (def.type === "optional") isOptional = true;
+		if (def.type === "nullable") isNullable = true;
 
 		if ("defaultValue" in def && def.defaultValue !== undefined) {
-			defaultValue = def.defaultValue;
+			hasDefault = true;
+			defaultValue =
+				typeof def.defaultValue === "function"
+					? (def.defaultValue as () => unknown)()
+					: def.defaultValue;
 		}
 
 		if (
@@ -38,10 +45,12 @@ export function dataFromSchema<S extends $ZodType>(
 	const def = current._zod.def;
 
 	if (data === undefined) {
-		if (defaultValue !== undefined) {
+		if (hasDefault) {
 			data = defaultValue as output<S>;
 		} else if (isOptional && (def.type === "object" || def.type === "array")) {
 			return undefined as output<S>;
+		} else if (isNullable) {
+			return null as output<S>;
 		}
 	}
 
@@ -72,11 +81,7 @@ export function dataFromSchema<S extends $ZodType>(
 	if (def.type === "array" && "element" in def && def.element) {
 		const element = def.element as $ZodType;
 
-		const arr = Array.isArray(data)
-			? data
-			: data === undefined && defaultValue !== undefined
-			  ? (defaultValue as unknown[])
-			  : [];
+		const arr = Array.isArray(data) ? data : [];
 
 		return arr.map((item) =>
 			dataFromSchema(element as any, item as any),

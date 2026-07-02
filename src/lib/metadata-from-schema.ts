@@ -6,100 +6,80 @@ type FieldMetadata = {
 	dirty: boolean;
 };
 
-type FormMetadata<T> = T extends Array<infer U>
-	? FormMetadata<U>[]
-	: T extends object
-	  ? { [K in keyof T]: FormMetadata<T[K]> }
-	  : FieldMetadata;
+type FormMetadata<T> =
+	T extends Array<infer U>
+		? FormMetadata<U>[]
+		: T extends object
+			? { [K in keyof T]: FormMetadata<T[K]> }
+			: FieldMetadata;
 
 export function metadataFromSchema<S extends $ZodType>(
 	schema: S,
 	state?: FormMetadata<S> | true,
 ): FormMetadata<S> {
-	return recurse(schema, state);
-}
+	function recurse(schema: $ZodType, state?: any): any {
+		let current = schema;
 
-function unwrap(schema: $ZodType): $ZodType {
-	let current = schema;
+		while (true) {
+			const innerDef = (current as any)._zod.def;
 
-	while (true) {
+			if (
+				(innerDef.type === "optional" ||
+					innerDef.type === "nullable" ||
+					innerDef.type === "default" ||
+					innerDef.type === "catch") &&
+				innerDef.innerType
+			) {
+				current = innerDef.innerType;
+			} else {
+				break;
+			}
+		}
+
 		const def = (current as any)._zod.def;
 
-		if (
-			(def.type === "optional" ||
-				def.type === "nullable" ||
-				def.type === "default" ||
-				def.type === "catch") &&
-			def.innerType
-		) {
-			current = def.innerType;
-		} else {
-			return current;
-		}
-	}
-}
+		if (def.type === "object") {
+			const shape = def.shape as Record<string, $ZodType>;
+			const result: Record<string, any> = {};
 
-function createDefaultMetadata(): FieldMetadata {
-	return {
-		attached: false,
-		blurred: false,
-		dirty: false,
-	};
-}
+			for (const key of Object.keys(shape)) {
+				const childState =
+					state === true
+						? true
+						: state && typeof state === "object" && !Array.isArray(state)
+							? state[key]
+							: undefined;
 
-function markAll(): FieldMetadata {
-	return {
-		attached: true,
-		blurred: true,
-		dirty: true,
-	};
-}
+				result[key] = recurse(shape[key], childState);
+			}
 
-function recurse(schema: $ZodType, state?: any): any {
-	const inner = unwrap(schema);
-	const def = (inner as any)._zod.def;
-
-	if (def.type === "object") {
-		const shape = def.shape as Record<string, $ZodType>;
-		const result: Record<string, any> = {};
-
-		for (const key of Object.keys(shape)) {
-			const childState =
-				state === true
-					? true
-					: state && typeof state === "object" && !Array.isArray(state)
-					  ? state[key]
-					  : undefined;
-
-			result[key] = recurse(shape[key], childState);
+			return result;
 		}
 
-		return result;
-	}
+		if (def.type === "array") {
+			const element = def.element as $ZodType;
 
-	if (def.type === "array") {
-		const element = def.element as $ZodType;
+			if (Array.isArray(state)) {
+				return state.map((s) => recurse(element, s));
+			}
 
-		if (state === true) {
 			return [];
 		}
 
-		if (Array.isArray(state)) {
-			return state.map((s) => recurse(element, s));
+		if (state === true) {
+			return { attached: true, blurred: true, dirty: true };
 		}
 
-		return [];
+		if (state && typeof state === "object") {
+			return {
+				attached: !!state.attached,
+				blurred: !!state.blurred,
+				dirty: !!state.dirty,
+			};
+		}
+
+		return { attached: false, blurred: false, dirty: false };
 	}
 
-	if (state === true) return markAll();
-
-	if (state && typeof state === "object") {
-		return {
-			attached: !!state.attached,
-			blurred: !!state.blurred,
-			dirty: !!state.dirty,
-		};
-	}
-
-	return createDefaultMetadata();
+	return recurse(schema, state);
 }

@@ -11,7 +11,7 @@
 				}),
 			),
 			position: z.string(),
-			phoneNumber: z.string(),
+			phoneNumber: z.nullable(z.optional(z.string().check(z.minLength(4)))),
 			eula: z.literal(true),
 		}),
 		async onSubmit(formData) {
