@@ -37,10 +37,10 @@ type Field = {
 type Fields<T> = T extends Date | File | Blob
 	? Field
 	: T extends Array<infer U>
-		? Fields<U>[]
-		: T extends object
-			? { [K in keyof T]-?: Fields<T[K]> }
-			: Field;
+	  ? Fields<U>[]
+	  : T extends object
+	    ? { [K in keyof T]-?: Fields<T[K]> }
+	    : Field;
 
 type FormState<S extends $ZodType> = {
 	data: output<S>;

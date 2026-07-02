@@ -6,12 +6,11 @@ type FieldMetadata = {
 	dirty: boolean;
 };
 
-type FormMetadata<T> =
-	T extends Array<infer U>
-		? FormMetadata<U>[]
-		: T extends object
-			? { [K in keyof T]: FormMetadata<T[K]> }
-			: FieldMetadata;
+type FormMetadata<T> = T extends Array<infer U>
+	? FormMetadata<U>[]
+	: T extends object
+	  ? { [K in keyof T]: FormMetadata<T[K]> }
+	  : FieldMetadata;
 
 export function metadataFromSchema<S extends $ZodType>(
 	schema: S,
@@ -47,8 +46,8 @@ export function metadataFromSchema<S extends $ZodType>(
 					state === true
 						? true
 						: state && typeof state === "object" && !Array.isArray(state)
-							? state[key]
-							: undefined;
+						  ? state[key]
+						  : undefined;
 
 				result[key] = recurse(shape[key], childState);
 			}
