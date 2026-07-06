@@ -42,8 +42,14 @@ type Fields<T> = T extends Date | File | Blob
 	    ? { [K in keyof T]-?: Fields<T[K]> }
 	    : Field;
 
+type FormData<T> = T extends Array<infer U>
+	? FormData<U>[]
+	: T extends object
+	  ? { [K in keyof T]: FormData<T[K]> }
+	  : T | null;
+
 type FormState<S extends $ZodType> = {
-	data: output<S>;
+	data: FormData<output<S>>;
 	errors: any;
 	metadata: any;
 	defaultData: output<S>;
@@ -153,6 +159,8 @@ export function createFields<S extends $ZodType>(
 
 	if (!cache.has(key)) {
 		cache.set(key, (node: Element) => {
+			ensurePath(state.metadata, path).attached = true;
+
 			const blur = () => {
 				ensurePath(state.metadata, path).blurred = true;
 			};
@@ -171,6 +179,7 @@ export function createFields<S extends $ZodType>(
 				node.removeEventListener("blur", blur, true);
 				node.removeEventListener("focus", focus, true);
 				node.removeEventListener("input", input, true);
+				ensurePath(state.metadata, path).attached = false;
 			};
 		});
 	}
@@ -189,11 +198,15 @@ export function createFields<S extends $ZodType>(
 			const errors = !eRaw ? undefined : Array.isArray(eRaw) ? eRaw : [eRaw];
 
 			if (!errors?.length) return errors;
+
 			if (state.wasSubmitted) return errors;
-			if (m?.focused) return m.blurred ? errors : undefined;
+
+			if (m?.attached) {
+				return m?.blurred ? errors : undefined;
+			}
+
 			return m?.dirty ? errors : undefined;
 		},
-
 		get dirty() {
 			const m = getAtPath(state.metadata, path);
 			const current = getAtPath(state.data, path);

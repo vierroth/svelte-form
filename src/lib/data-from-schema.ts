@@ -3,21 +3,28 @@ import type { output } from "zod/v4/core";
 
 type $ZodType = core.$ZodType;
 
+type FormState<T> = T extends Array<infer U>
+	? FormState<U>[]
+	: T extends object
+	  ? { [K in keyof T]: FormState<T[K]> }
+	  : T | null;
+
 export function dataFromSchema<S extends $ZodType>(
 	schema: S,
 	data?: output<S>,
-): output<S> {
+): FormState<output<S>> {
 	let current: $ZodType = schema;
 	let defaultValue: unknown;
 	let hasDefault = false;
-	let isNullable = false;
 
 	while (true) {
 		const def = current._zod.def;
 
-		if (def.type === "nullable") isNullable = true;
-
-		if ("defaultValue" in def && def.defaultValue !== undefined) {
+		if (
+			!hasDefault &&
+			"defaultValue" in def &&
+			def.defaultValue !== undefined
+		) {
 			hasDefault = true;
 			defaultValue =
 				typeof def.defaultValue === "function"
@@ -60,7 +67,7 @@ export function dataFromSchema<S extends $ZodType>(
 			result[key] = dataFromSchema(shape[key] as any, dataObj?.[key] as any);
 		}
 
-		return result as output<S>;
+		return result as FormState<output<S>>;
 	}
 
 	if (def.type === "array" && "element" in def && def.element) {
@@ -70,12 +77,8 @@ export function dataFromSchema<S extends $ZodType>(
 
 		return arr.map((item) =>
 			dataFromSchema(element as any, item as any),
-		) as output<S>;
+		) as FormState<output<S>>;
 	}
 
-	if (data === undefined && isNullable) {
-		return null as output<S>;
-	}
-
-	return data as output<S>;
+	return (data === undefined ? null : data) as FormState<output<S>>;
 }

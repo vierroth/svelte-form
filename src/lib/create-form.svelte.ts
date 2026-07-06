@@ -152,6 +152,9 @@ export function createForm<S extends $ZodType>(props: {
 		reset() {
 			form?.reset();
 		},
+		validateAll() {
+			wasSubmitted = true;
+		},
 		get data() {
 			return data;
 		},
