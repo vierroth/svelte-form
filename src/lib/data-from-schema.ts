@@ -20,16 +20,12 @@ export function dataFromSchema<S extends $ZodType>(
 	while (true) {
 		const def = current._zod.def;
 
-		if (
-			!hasDefault &&
-			"defaultValue" in def &&
-			def.defaultValue !== undefined
-		) {
+		if (!hasDefault && (def.type === "default" || def.type === "prefault")) {
 			hasDefault = true;
 			defaultValue =
-				typeof def.defaultValue === "function"
-					? (def.defaultValue as () => unknown)()
-					: def.defaultValue;
+				typeof (def as any).defaultValue === "function"
+					? ((def as any).defaultValue as () => unknown)()
+					: (def as any).defaultValue;
 		}
 
 		if (
@@ -51,6 +47,10 @@ export function dataFromSchema<S extends $ZodType>(
 
 	if (data === undefined && hasDefault) {
 		data = defaultValue as output<S>;
+	}
+
+	if (hasDefault && defaultValue === undefined && data === undefined) {
+		return null as FormState<output<S>>;
 	}
 
 	if (def.type === "object" && "shape" in def && def.shape) {
@@ -78,6 +78,58 @@ export function dataFromSchema<S extends $ZodType>(
 		return arr.map((item) =>
 			dataFromSchema(element as any, item as any),
 		) as FormState<output<S>>;
+	}
+
+	if (def.type === "tuple" && "items" in def && def.items) {
+		const items = def.items as $ZodType[];
+		const rest = "rest" in def ? (def.rest as $ZodType | undefined) : undefined;
+
+		const arr = Array.isArray(data) ? data : [];
+
+		const result = items.map((item, index) =>
+			dataFromSchema(item as any, arr[index] as any),
+		);
+
+		if (rest) {
+			for (let i = items.length; i < arr.length; i++) {
+				result.push(dataFromSchema(rest as any, arr[i] as any));
+			}
+		}
+
+		return result as FormState<output<S>>;
+	}
+
+	if (def.type === "record" && "valueType" in def && def.valueType) {
+		const valueType = def.valueType as $ZodType;
+
+		const dataObj =
+			data && typeof data === "object" && !Array.isArray(data)
+				? (data as Record<string, unknown>)
+				: undefined;
+
+		const result: Record<string, unknown> = {};
+
+		if (dataObj) {
+			for (const key in dataObj) {
+				result[key] = dataFromSchema(valueType as any, dataObj[key] as any);
+			}
+		}
+
+		return result as FormState<output<S>>;
+	}
+
+	if (def.type === "union" && "options" in def && def.options) {
+		const options = def.options as $ZodType[];
+
+		for (const option of options) {
+			const parsed = (option as any)._zod.run({ value: data, issues: [] }, {});
+
+			if (!(parsed instanceof Promise) && parsed.issues.length === 0) {
+				return dataFromSchema(option as any, data as any);
+			}
+		}
+
+		return dataFromSchema(options[0] as any, data as any);
 	}
 
 	return (data === undefined ? null : data) as FormState<output<S>>;
