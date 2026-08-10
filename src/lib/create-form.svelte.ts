@@ -17,6 +17,10 @@ export function createForm<S extends $ZodType>(props: {
 }) {
 	let form: HTMLFormElement | undefined;
 
+	let onSubmit = props.onSubmit;
+	let onSuccess = props.onSuccess;
+	let onError = props.onError;
+
 	let data = $state(dataFromSchema(props.schema, props.initialValues));
 	let metadata = $state(metadataFromSchema(props.schema));
 	let errors = $state(errorsFromSchema(props.schema));
@@ -90,23 +94,23 @@ export function createForm<S extends $ZodType>(props: {
 
 		try {
 			if (!isValid) {
-				await props.onError?.();
+				await onError?.();
 				return;
 			}
 
-			if (props.onSubmit) {
+			if (onSubmit) {
 				if (parsedData === undefined) {
-					await props.onError?.();
+					await onError?.();
 					return;
 				}
-				const result = await props.onSubmit(parsedData);
+				const result = await onSubmit(parsedData);
 				if (result === false) {
-					await props.onError?.();
+					await onError?.();
 					return;
 				}
 			} else {
 				if (!form) {
-					await props.onError?.();
+					await onError?.();
 					return;
 				}
 				const response = await fetch("", {
@@ -114,14 +118,14 @@ export function createForm<S extends $ZodType>(props: {
 					body: new FormData(form),
 				});
 				if (!response.ok) {
-					await props.onError?.();
+					await onError?.();
 					return;
 				}
 			}
 
-			await props.onSuccess?.();
+			await onSuccess?.();
 		} catch {
-			await props.onError?.();
+			await onError?.();
 		} finally {
 			isSubmitting = false;
 		}
@@ -181,6 +185,24 @@ export function createForm<S extends $ZodType>(props: {
 		},
 		get wasSubmitted() {
 			return wasSubmitted;
+		},
+		get onSubmit() {
+			return onSubmit;
+		},
+		set onSubmit(value) {
+			onSubmit = value;
+		},
+		get onSuccess() {
+			return onSuccess;
+		},
+		set onSuccess(value) {
+			onSuccess = value;
+		},
+		get onError() {
+			return onError;
+		},
+		set onError(value) {
+			onError = value;
 		},
 	};
 }
