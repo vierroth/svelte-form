@@ -9,29 +9,40 @@ type FormState<T> = T extends Array<infer U>
 	  ? { [K in keyof T]: FormState<T[K]> }
 	  : T | null;
 
-export function dataFromSchema<S extends $ZodType>(
-	schema: S,
-	data?: output<S>,
-): FormState<output<S>> {
-	let current: $ZodType = schema;
-	let defaultValue: unknown;
+type WrapperInfo = {
+	schema: $ZodType;
+	isOptionalOrNullable: boolean;
+	hasDefault: boolean;
+	defaultValue: unknown;
+};
+
+function inspectWrappers(schema: $ZodType): WrapperInfo {
+	let current = schema;
+	let isOptionalOrNullable = false;
 	let hasDefault = false;
+	let defaultValue: unknown;
 
 	while (true) {
 		const def = current._zod.def;
 
+		if (def.type === "optional" || def.type === "nullable") {
+			isOptionalOrNullable = true;
+		}
+
 		if (!hasDefault && (def.type === "default" || def.type === "prefault")) {
 			hasDefault = true;
+
+			const value = (def as any).defaultValue;
+
 			defaultValue =
-				typeof (def as any).defaultValue === "function"
-					? ((def as any).defaultValue as () => unknown)()
-					: (def as any).defaultValue;
+				typeof value === "function" ? (value as () => unknown)() : value;
 		}
 
 		if (
 			(def.type === "optional" ||
 				def.type === "nullable" ||
 				def.type === "default" ||
+				def.type === "prefault" ||
 				def.type === "catch") &&
 			"innerType" in def &&
 			def.innerType
@@ -40,24 +51,48 @@ export function dataFromSchema<S extends $ZodType>(
 			continue;
 		}
 
-		break;
+		return {
+			schema: current,
+			isOptionalOrNullable,
+			hasDefault,
+			defaultValue,
+		};
+	}
+}
+
+export function dataFromSchema<S extends $ZodType>(
+	schema: S,
+	data?: output<S>,
+): FormState<output<S>> {
+	const {
+		schema: current,
+		isOptionalOrNullable,
+		hasDefault,
+		defaultValue,
+	} = inspectWrappers(schema);
+
+	if (data === undefined) {
+		if (hasDefault) {
+			data = defaultValue as output<S>;
+			if (data === undefined) {
+				return null as FormState<output<S>>;
+			}
+		} else if (isOptionalOrNullable) {
+			return null as FormState<output<S>>;
+		}
+	}
+
+	if (data === null && isOptionalOrNullable) {
+		return null as FormState<output<S>>;
 	}
 
 	const def = current._zod.def;
-
-	if (data === undefined && hasDefault) {
-		data = defaultValue as output<S>;
-	}
-
-	if (hasDefault && defaultValue === undefined && data === undefined) {
-		return null as FormState<output<S>>;
-	}
 
 	if (def.type === "object" && "shape" in def && def.shape) {
 		const shape = def.shape as Record<string, $ZodType>;
 
 		const dataObj =
-			data && typeof data === "object" && !Array.isArray(data)
+			data !== null && typeof data === "object" && !Array.isArray(data)
 				? (data as Record<string, unknown>)
 				: undefined;
 
@@ -72,10 +107,9 @@ export function dataFromSchema<S extends $ZodType>(
 
 	if (def.type === "array" && "element" in def && def.element) {
 		const element = def.element as $ZodType;
+		const array = Array.isArray(data) ? data : [];
 
-		const arr = Array.isArray(data) ? data : [];
-
-		return arr.map((item) =>
+		return array.map((item) =>
 			dataFromSchema(element as any, item as any),
 		) as FormState<output<S>>;
 	}
@@ -84,15 +118,15 @@ export function dataFromSchema<S extends $ZodType>(
 		const items = def.items as $ZodType[];
 		const rest = "rest" in def ? (def.rest as $ZodType | undefined) : undefined;
 
-		const arr = Array.isArray(data) ? data : [];
+		const array = Array.isArray(data) ? data : [];
 
 		const result = items.map((item, index) =>
-			dataFromSchema(item as any, arr[index] as any),
+			dataFromSchema(item as any, array[index] as any),
 		);
 
 		if (rest) {
-			for (let i = items.length; i < arr.length; i++) {
-				result.push(dataFromSchema(rest as any, arr[i] as any));
+			for (let index = items.length; index < array.length; index++) {
+				result.push(dataFromSchema(rest as any, array[index] as any));
 			}
 		}
 
@@ -103,7 +137,7 @@ export function dataFromSchema<S extends $ZodType>(
 		const valueType = def.valueType as $ZodType;
 
 		const dataObj =
-			data && typeof data === "object" && !Array.isArray(data)
+			data !== null && typeof data === "object" && !Array.isArray(data)
 				? (data as Record<string, unknown>)
 				: undefined;
 
