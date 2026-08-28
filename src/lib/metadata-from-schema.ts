@@ -1,4 +1,4 @@
-import type { $ZodType } from "zod/v4/core";
+import type { $ZodType, output } from "zod/v4/core";
 
 type FieldMetadata = {
 	attached: boolean;
@@ -6,16 +6,18 @@ type FieldMetadata = {
 	dirty: boolean;
 };
 
-type FormMetadata<T> = T extends Array<infer U>
-	? FormMetadata<U>[]
-	: T extends object
-	  ? { [K in keyof T]: FormMetadata<T[K]> }
-	  : FieldMetadata;
+type FormMetadata<T> = T extends Set<unknown> | Map<unknown, unknown> | Date
+	? FieldMetadata
+	: T extends Array<infer U>
+	  ? FormMetadata<U>[]
+	  : T extends object
+	    ? { [K in keyof T]: FormMetadata<T[K]> }
+	    : FieldMetadata;
 
 export function metadataFromSchema<S extends $ZodType>(
 	schema: S,
 	state?: FormMetadata<S> | true,
-): FormMetadata<S> {
+): FormMetadata<output<S>> {
 	function recurse(schema: $ZodType, state?: any): any {
 		let current = schema;
 

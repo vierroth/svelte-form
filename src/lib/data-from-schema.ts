@@ -3,11 +3,17 @@ import type { output } from "zod/v4/core";
 
 type $ZodType = core.$ZodType;
 
-type FormState<T> = T extends Array<infer U>
-	? FormState<U>[]
-	: T extends object
-	  ? { [K in keyof T]: FormState<T[K]> }
-	  : T | null;
+export type FormState<T> = T extends Set<infer U>
+	? Set<U>
+	: T extends Map<infer K, infer V>
+	  ? Map<K, V>
+	  : T extends Date
+	    ? Date
+	    : T extends Array<infer U>
+	      ? FormState<U>[]
+	      : T extends object
+	        ? { [K in keyof T]: FormState<T[K]> }
+	        : T | null;
 
 type WrapperInfo = {
 	schema: $ZodType;

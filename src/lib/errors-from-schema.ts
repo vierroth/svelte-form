@@ -1,11 +1,17 @@
 import type { $ZodIssue, $ZodType, output } from "zod/v4/core";
 import type { core } from "zod/mini";
 
-type FieldErrors<T> = T extends Array<infer U>
-	? FieldErrors<U>[]
-	: T extends object
-	  ? { [K in keyof T]: FieldErrors<T[K]> }
-	  : string[] | undefined;
+type FieldErrors<T> = T extends Set<unknown>
+	? string[] | undefined
+	: T extends Map<unknown, unknown>
+	  ? string[] | undefined
+	  : T extends Date
+	    ? string[] | undefined
+	    : T extends Array<infer U>
+	      ? FieldErrors<U>[]
+	      : T extends object
+	        ? { [K in keyof T]: FieldErrors<T[K]> }
+	        : string[] | undefined;
 
 type FormErrors<T> = FieldErrors<T> & {
 	submit?: string;

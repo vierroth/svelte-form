@@ -10,6 +10,7 @@
 					title: z.string(),
 				}),
 			),
+			tags: z.set(z.string()).check(z.minSize(1)),
 			position: z.string(),
 			phoneNumber: z.nullable(z.optional(z.string().check(z.minLength(4)))),
 			eula: z.literal(true),
