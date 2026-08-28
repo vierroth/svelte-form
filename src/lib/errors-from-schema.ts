@@ -1,5 +1,5 @@
-import type { $ZodIssue, $ZodType, output } from "zod/v4/core";
 import type { core } from "zod/mini";
+import type { $ZodIssue, $ZodType, output } from "zod/v4/core";
 
 type FieldErrors<T> = T extends Set<unknown>
 	? string[] | undefined
@@ -17,51 +17,47 @@ type FormErrors<T> = FieldErrors<T> & {
 	submit?: string;
 };
 
-export function errorsFromSchema<S extends $ZodType>(
-	schema: S,
-	issues: $ZodIssue[] = [],
-): FormErrors<output<S>> {
-	function emptyFromSchema(schema: core.$ZodType): any {
-		let current: core.$ZodType = schema;
+function emptyFromSchema(schema: core.$ZodType): any {
+	let current = schema;
 
-		while (true) {
-			const def = current._zod.def;
-
-			if (
-				(def.type === "optional" ||
-					def.type === "nullable" ||
-					def.type === "default" ||
-					def.type === "catch") &&
-				"innerType" in def &&
-				def.innerType
-			) {
-				current = def.innerType as core.$ZodType;
-			} else {
-				break;
-			}
-		}
-
+	while (true) {
 		const def = current._zod.def;
 
-		if (def.type === "object" && "shape" in def && (def as any).shape) {
-			const shape = (def as any).shape as Record<string, core.$ZodType>;
-			const result: Record<string, any> = {};
-
-			for (const key of Object.keys(shape)) {
-				result[key] = emptyFromSchema(shape[key]);
-			}
-
-			return result;
+		if (
+			(def.type === "optional" ||
+				def.type === "nullable" ||
+				def.type === "default" ||
+				def.type === "catch") &&
+			"innerType" in def &&
+			def.innerType
+		) {
+			current = def.innerType as core.$ZodType;
+			continue;
 		}
 
-		if (def.type === "array") {
-			return [];
-		}
-
-		return undefined;
+		break;
 	}
 
-	const result: any = emptyFromSchema(schema);
+	const def = current._zod.def;
+
+	if (def.type === "object" && "shape" in def && def.shape) {
+		const shape = def.shape as Record<string, core.$ZodType>;
+		const result: Record<string, any> = {};
+
+		for (const key in shape) {
+			result[key] = emptyFromSchema(shape[key]);
+		}
+
+		return result;
+	}
+
+	if (def.type === "array") return [];
+
+	return undefined;
+}
+
+function errorsFromSchemaImpl(schema: core.$ZodType, issues: $ZodIssue[]): any {
+	const result = emptyFromSchema(schema);
 
 	for (const issue of issues) {
 		if (issue.path.length === 0) {
@@ -75,17 +71,15 @@ export function errorsFromSchema<S extends $ZodType>(
 
 		for (let i = 0; i < issue.path.length; i++) {
 			const key = issue.path[i] as string | number;
-			const isLast = i === issue.path.length - 1;
 
-			if (isLast) {
+			if (i === issue.path.length - 1) {
 				if (!Array.isArray(current[key])) current[key] = [];
 				current[key].push(issue.message);
 				continue;
 			}
 
 			if (current[key] === undefined || current[key] === null) {
-				const nextKey = issue.path[i + 1];
-				current[key] = typeof nextKey === "number" ? [] : {};
+				current[key] = typeof issue.path[i + 1] === "number" ? [] : {};
 			}
 
 			current = current[key];
@@ -93,4 +87,13 @@ export function errorsFromSchema<S extends $ZodType>(
 	}
 
 	return result;
+}
+
+export function errorsFromSchema<S extends $ZodType>(
+	schema: S,
+	issues: $ZodIssue[] = [],
+): FormErrors<output<S>> {
+	return errorsFromSchemaImpl(schema as core.$ZodType, issues) as FormErrors<
+		output<S>
+	>;
 }

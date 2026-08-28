@@ -38,7 +38,7 @@ function inspectWrappers(schema: $ZodType): WrapperInfo {
 		if (!hasDefault && (def.type === "default" || def.type === "prefault")) {
 			hasDefault = true;
 
-			const value = (def as any).defaultValue;
+			const value = (def as unknown as { defaultValue: unknown }).defaultValue;
 
 			defaultValue =
 				typeof value === "function" ? (value as () => unknown)() : value;
@@ -70,6 +70,10 @@ export function dataFromSchema<S extends $ZodType>(
 	schema: S,
 	data?: output<S>,
 ): FormState<output<S>> {
+	return dataFromSchemaImpl(schema, data) as FormState<output<S>>;
+}
+
+function dataFromSchemaImpl(schema: $ZodType, data?: unknown): unknown {
 	const {
 		schema: current,
 		isOptionalOrNullable,
@@ -79,83 +83,76 @@ export function dataFromSchema<S extends $ZodType>(
 
 	if (data === undefined) {
 		if (hasDefault) {
-			data = defaultValue as output<S>;
+			data = defaultValue;
+
 			if (data === undefined) {
-				return null as FormState<output<S>>;
+				return null;
 			}
 		} else if (isOptionalOrNullable) {
-			return null as FormState<output<S>>;
+			return null;
 		}
 	}
 
 	if (data === null && isOptionalOrNullable) {
-		return null as FormState<output<S>>;
+		return null;
 	}
 
 	const def = current._zod.def;
 
 	if (def.type === "object" && "shape" in def && def.shape) {
 		const shape = def.shape as Record<string, $ZodType>;
-
-		const dataObj =
+		const source =
 			data !== null && typeof data === "object" && !Array.isArray(data)
 				? (data as Record<string, unknown>)
 				: undefined;
-
 		const result: Record<string, unknown> = {};
 
 		for (const key in shape) {
-			result[key] = dataFromSchema(shape[key] as any, dataObj?.[key] as any);
+			result[key] = dataFromSchemaImpl(shape[key], source?.[key]);
 		}
 
-		return result as FormState<output<S>>;
+		return result;
 	}
 
 	if (def.type === "array" && "element" in def && def.element) {
 		const element = def.element as $ZodType;
-		const array = Array.isArray(data) ? data : [];
+		const source = Array.isArray(data) ? data : [];
 
-		return array.map((item) =>
-			dataFromSchema(element as any, item as any),
-		) as FormState<output<S>>;
+		return source.map((value) => dataFromSchemaImpl(element, value));
 	}
 
 	if (def.type === "tuple" && "items" in def && def.items) {
 		const items = def.items as $ZodType[];
 		const rest = "rest" in def ? (def.rest as $ZodType | undefined) : undefined;
-
-		const array = Array.isArray(data) ? data : [];
-
+		const source = Array.isArray(data) ? data : [];
 		const result = items.map((item, index) =>
-			dataFromSchema(item as any, array[index] as any),
+			dataFromSchemaImpl(item, source[index]),
 		);
 
 		if (rest) {
-			for (let index = items.length; index < array.length; index++) {
-				result.push(dataFromSchema(rest as any, array[index] as any));
+			for (let index = items.length; index < source.length; index++) {
+				result.push(dataFromSchemaImpl(rest, source[index]));
 			}
 		}
 
-		return result as FormState<output<S>>;
+		return result;
 	}
 
 	if (def.type === "record" && "valueType" in def && def.valueType) {
 		const valueType = def.valueType as $ZodType;
-
-		const dataObj =
+		const source =
 			data !== null && typeof data === "object" && !Array.isArray(data)
 				? (data as Record<string, unknown>)
 				: undefined;
-
 		const result: Record<string, unknown> = {};
 
-		if (dataObj) {
-			for (const key in dataObj) {
-				result[key] = dataFromSchema(valueType as any, dataObj[key] as any);
+		if (source) {
+			for (const key in source) {
+				result[key] = dataFromSchemaImpl(valueType, source[key]);
 			}
 		}
 
-		return result as FormState<output<S>>;
+		return result;
 	}
 
 	if (def.type === "union" && "options" in def && def.options) {
@@ -165,12 +162,12 @@ export function dataFromSchema<S extends $ZodType>(
 			const parsed = (option as any)._zod.run({ value: data, issues: [] }, {});
 
 			if (!(parsed instanceof Promise) && parsed.issues.length === 0) {
-				return dataFromSchema(option as any, data as any);
+				return dataFromSchemaImpl(option, data);
 			}
 		}
 
-		return dataFromSchema(options[0] as any, data as any);
+		return dataFromSchemaImpl(options[0], data);
 	}
 
-	return (data === undefined ? null : data) as FormState<output<S>>;
+	return data === undefined ? null : data;
 }
