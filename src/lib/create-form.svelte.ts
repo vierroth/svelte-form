@@ -78,7 +78,7 @@ export function createForm<S extends $ZodType>(props: {
 		if (isSubmitting) return;
 
 		wasSubmitted = false;
-		data = dataFromSchema(props.schema, props.initialValues);
+		data = dataFromSchema(props.schema, defaultData);
 		metadata = metadataFromSchema(props.schema);
 	}
 
@@ -153,7 +153,13 @@ export function createForm<S extends $ZodType>(props: {
 		submit() {
 			form?.requestSubmit();
 		},
-		reset() {
+		reset(values?: output<S>) {
+			if (isSubmitting) return;
+			if (values !== undefined) {
+				defaultData = $state.snapshot(
+					dataFromSchema(props.schema, values),
+				) as output<S>;
+			}
 			form?.reset();
 		},
 		validateAll() {

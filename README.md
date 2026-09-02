@@ -1,58 +1,99 @@
-# create-svelte
+# Svelte Schema Form
 
-Everything you need to build a Svelte library, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/main/packages/create-svelte).
+A lightweight, reactive form helper for **Svelte 5** and **Zod Mini**.
 
-Read more about creating a library [in the docs](https://kit.svelte.dev/docs/packaging).
+### Features
 
-## Creating a project
+- Schema-based reactive validation
+- Typed form data
+- Field errors and interaction state
+- Nested objects and dynamic arrays
+- Dirty and submission state
+- Reset with optional new defaults
+- Async submission callbacks
 
-If you're seeing this, you've probably already done this step. Congrats!
+### Usage
 
-```bash
-# create a new project in the current directory
-npm create svelte@latest
+```svelte
+<script lang="ts">
+	import { createForm } from "$lib";
+	import { z } from "zod/mini";
 
-# create a new project in my-app
-npm create svelte@latest my-app
+	const form = createForm({
+		schema: z.object({
+			name: z.string().check(z.minLength(1, "Name is required")),
+			accepted: z.literal(true),
+		}),
+		initialValues: {
+			name: "",
+			accepted: true,
+		},
+		async onSubmit(data) {
+			console.log(data);
+		},
+	});
+</script>
+
+<form {@attach form.attachment}>
+	<input bind:value={form.data.name} {@attach form.metadata.name.attachment} />
+
+	{#each form.metadata.name.errors ?? [] as error}
+		<p>{error}</p>
+	{/each}
+
+	<input
+		type="checkbox"
+		bind:checked={form.data.accepted}
+		{@attach form.metadata.accepted.attachment}
+	/>
+
+	<button type="submit" disabled={form.isSubmitting}>Submit</button>
+	<button type="reset">Reset</button>
+</form>
 ```
 
-## Developing
+### Resetting
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Reset to the current defaults:
 
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```ts
+form.reset();
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+Replace the defaults and reset:
 
-## Building
-
-To build your library:
-
-```bash
-npm run package
+```ts
+form.reset({
+	name: "Jane",
+	accepted: true,
+});
 ```
 
-To create a production version of your showcase app:
+### API
 
-```bash
-npm run build
-```
+#### Methods
 
-You can preview the production build with `npm run preview`.
+- `submit()` — requests form submission
+- `reset(values?)` — resets the form and optionally replaces its defaults
+- `validateAll()` — reveals all validation errors
 
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
+#### State
 
-## Publishing
+- `data`
+- `metadata`
+- `errors`
+- `defaultData`
+- `isValid`
+- `isDirty`
+- `isSubmitting`
+- `wasSubmitted`
 
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
+Each field exposes `attachment`, `errors`, `dirty`, `blurred`, `focused`, and `touched`.
 
-To publish your library to [npm](https://www.npmjs.com):
+### Submission
 
-```bash
-npm publish
-```
+If `onSubmit` is omitted, the form submits using `fetch()` and `FormData`. Returning `false` from `onSubmit` triggers `onError`.
+
+### License
+
+Apache License 2.0
