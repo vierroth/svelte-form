@@ -59,8 +59,10 @@ export function createForm<S extends $ZodType>(props: {
 		untrack(() => {
 			parsedData = result.success ? result.data : undefined;
 
-			const issues = result.success ? [] : result.error.issues;
-			const newErrors = errorsFromSchema(props.schema, issues);
+			const newErrors = errorsFromSchema(
+				props.schema,
+				result.success ? [] : result.error.issues,
+			);
 
 			if (!equal(errors, newErrors)) {
 				errors = newErrors;
@@ -92,18 +94,16 @@ export function createForm<S extends $ZodType>(props: {
 
 		metadata = metadataFromSchema(props.schema);
 
-		try {
-			if (!isValid) {
-				await onError?.();
-				return;
-			}
+		const snapshot = $state.snapshot(parsedData);
 
+		if (snapshot == null) {
+			await onError?.();
+			return;
+		}
+
+		try {
 			if (onSubmit) {
-				if (parsedData === undefined) {
-					await onError?.();
-					return;
-				}
-				const result = await onSubmit(parsedData);
+				const result = await onSubmit(snapshot as output<S>);
 				if (result === false) {
 					await onError?.();
 					return;
