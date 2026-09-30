@@ -8,13 +8,33 @@ import { errorsFromSchema } from "./errors-from-schema.js";
 import { createFields } from "./create-fields.js";
 import { untrack } from "svelte";
 
+type FormApi<S extends $ZodType> = {
+	attachment: Attachment;
+	submit(): void;
+	reset(values?: output<S>): void;
+	validateAll(): void;
+	readonly data: ReturnType<typeof dataFromSchema<S>>;
+	readonly metadata: ReturnType<typeof createFields<S>>;
+	readonly errors: ReturnType<typeof errorsFromSchema<S>>;
+	defaultData: output<S>;
+	readonly isValid: boolean;
+	readonly isDirty: boolean;
+	readonly isSubmitting: boolean;
+	readonly wasSubmitted: boolean;
+	onSubmit:
+		| ((data: output<S>) => Promise<void | boolean> | (void | boolean))
+		| undefined;
+	onSuccess: (() => Promise<void> | void) | undefined;
+	onError: (() => Promise<void> | void) | undefined;
+};
+
 export function createForm<S extends $ZodType>(props: {
 	schema: S;
 	initialValues?: output<S>;
 	onSubmit?: (data: output<S>) => Promise<void | boolean> | (void | boolean);
 	onSuccess?: () => Promise<void> | void;
 	onError?: () => Promise<void> | void;
-}) {
+}): FormApi<S> {
 	let form: HTMLFormElement | undefined;
 
 	let onSubmit = props.onSubmit;
@@ -92,16 +112,16 @@ export function createForm<S extends $ZodType>(props: {
 		isSubmitting = true;
 		wasSubmitted = true;
 
-		metadata = metadataFromSchema(props.schema);
-
-		const snapshot: output<S> = $state.snapshot(parsedData as unknown);
-
-		if (snapshot == null) {
-			await onError?.();
-			return;
-		}
-
 		try {
+			metadata = metadataFromSchema(props.schema);
+
+			const snapshot: output<S> = $state.snapshot(parsedData as unknown);
+
+			if (snapshot == null) {
+				await onError?.();
+				return;
+			}
+
 			if (onSubmit) {
 				const result = await onSubmit(snapshot as output<S>);
 				if (result === false) {

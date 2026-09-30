@@ -37,16 +37,17 @@ type Field = {
 type Fields<T> = T extends Date | File | Blob
 	? Field
 	: T extends Array<infer U>
-	  ? Fields<U>[]
-	  : T extends object
-	    ? { [K in keyof T]-?: Fields<T[K]> }
-	    : Field;
+		? Fields<U>[]
+		: T extends object
+			? { [K in keyof T]-?: Fields<T[K]> }
+			: Field;
 
-type FormData<T> = T extends Array<infer U>
-	? FormData<U>[]
-	: T extends object
-	  ? { [K in keyof T]: FormData<T[K]> }
-	  : T | null;
+type FormData<T> =
+	T extends Array<infer U>
+		? FormData<U>[]
+		: T extends object
+			? { [K in keyof T]: FormData<T[K]> }
+			: T | null;
 
 type FormState<S extends $ZodType> = {
 	data: FormData<output<S>>;
@@ -96,6 +97,21 @@ export function createFields<S extends $ZodType>(
 	path: (string | number)[] = [],
 	cache = new Map<string, Attachment>(),
 ): Fields<output<S>> {
+	return createFieldsImpl(schema, state, path, cache) as Fields<output<S>>;
+}
+
+function createFieldsImpl(
+	schema: $ZodType,
+	state: {
+		data: unknown;
+		errors: unknown;
+		metadata: unknown;
+		defaultData: unknown;
+		wasSubmitted: boolean;
+	},
+	path: (string | number)[],
+	cache: Map<string, Attachment>,
+): unknown {
 	const currentSchema = getSchemaAtPath(schema, path);
 	const def = currentSchema?._zod?.def;
 
@@ -112,13 +128,13 @@ export function createFields<S extends $ZodType>(
 				if (key === Symbol.iterator) {
 					return function* () {
 						for (let i = 0; i < length; i++) {
-							yield createFields(schema, state, [...path, i], cache);
+							yield createFieldsImpl(schema, state, [...path, i], cache);
 						}
 					};
 				}
 
 				if (typeof key === "string" && /^\d+$/.test(key)) {
-					return createFields(schema, state, [...path, Number(key)], cache);
+					return createFieldsImpl(schema, state, [...path, Number(key)], cache);
 				}
 
 				if (key === "map") {
@@ -126,7 +142,7 @@ export function createFields<S extends $ZodType>(
 						const result = [];
 						for (let i = 0; i < length; i++) {
 							result.push(
-								fn(createFields(schema, state, [...path, i], cache), i),
+								fn(createFieldsImpl(schema, state, [...path, i], cache), i),
 							);
 						}
 						return result;
@@ -136,21 +152,21 @@ export function createFields<S extends $ZodType>(
 				if (key === "forEach") {
 					return (fn: (item: any, index: number) => void) => {
 						for (let i = 0; i < length; i++) {
-							fn(createFields(schema, state, [...path, i], cache), i);
+							fn(createFieldsImpl(schema, state, [...path, i], cache), i);
 						}
 					};
 				}
 
 				return undefined;
 			},
-		}) as unknown as Fields<output<S>>;
+		});
 	}
 
 	if (def?.type === "object") {
 		const out: any = {};
 		const shape = (def as any).shape;
 		for (const k of Object.keys(shape)) {
-			out[k] = createFields(schema, state, [...path, k], cache);
+			out[k] = createFieldsImpl(schema, state, [...path, k], cache);
 		}
 		return out;
 	}
@@ -213,20 +229,16 @@ export function createFields<S extends $ZodType>(
 			const initial = getAtPath(state.defaultData, path);
 			return !!(m?.dirty || !equal(current, initial));
 		},
-
 		get blurred() {
 			return !!getAtPath(state.metadata, path)?.blurred;
 		},
-
 		get focused() {
 			return !!getAtPath(state.metadata, path)?.focused;
 		},
-
 		get touched() {
 			const m = getAtPath(state.metadata, path);
 			return !!(m?.dirty || m?.blurred || m?.focused);
 		},
-
 		attachment,
-	} as unknown as Fields<output<S>>;
+	};
 }
