@@ -25,7 +25,7 @@ export function createForm<S extends $ZodType>(props: {
 	let metadata = $state(metadataFromSchema(props.schema));
 	let errors = $state(errorsFromSchema(props.schema));
 
-	let defaultData = $state<output<S>>($state.snapshot(data) as any);
+	let defaultData = $state<output<S>>($state.snapshot(data as unknown));
 	let parsedData = $state<output<S>>();
 
 	let isSubmitting = $state(false);
@@ -51,7 +51,7 @@ export function createForm<S extends $ZodType>(props: {
 		},
 	};
 
-	const fields = createFields(props.schema, state);
+	const fields = createFields<S>(props.schema, state as any);
 
 	$effect(() => {
 		const result = safeParse(props.schema, data);
@@ -94,7 +94,7 @@ export function createForm<S extends $ZodType>(props: {
 
 		metadata = metadataFromSchema(props.schema);
 
-		const snapshot = $state.snapshot(parsedData);
+		const snapshot: output<S> = $state.snapshot(parsedData as unknown);
 
 		if (snapshot == null) {
 			await onError?.();
@@ -157,8 +157,8 @@ export function createForm<S extends $ZodType>(props: {
 			if (isSubmitting) return;
 			if (values !== undefined) {
 				defaultData = $state.snapshot(
-					dataFromSchema(props.schema, values),
-				) as output<S>;
+					dataFromSchema(props.schema, values) as unknown,
+				);
 			}
 			form?.reset();
 		},
